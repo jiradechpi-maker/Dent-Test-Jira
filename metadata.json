@@ -1,0 +1,6 @@
+{
+  "name": "Dent Letter System | คณะทันตแพทยศาสตร์ สจล.",
+  "description": "ระบบออกหนังสือราชการเชิญอาจารย์พิเศษและชุดเอกสารเบิกจ่าย คณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

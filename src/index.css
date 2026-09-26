@@ -1,0 +1,370 @@
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,400;0,700;1,400&display=swap');
+
+/* เชื่อมชื่อ TH Sarabun PSK และ TH Sarabun New เข้ากับ Google Font Sarabun */
+@font-face {
+  font-family: 'TH Sarabun PSK';
+  src: local('Sarabun'), url('https://fonts.gstatic.com/s/sarabun/v13/dtTkJxB5q28zsC2DA-4.woff2') format('woff2');
+  font-weight: normal;
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  src: local('Sarabun'), url('https://fonts.gstatic.com/s/sarabun/v13/dtTkJxB5q28zsC2DA-4.woff2') format('woff2');
+  font-weight: normal;
+}
+@font-face {
+  font-family: 'TH Sarabun PSK';
+  src: local('Sarabun Bold'), local('Sarabun-Bold'), url('https://fonts.gstatic.com/s/sarabun/v13/dtTkJxB5q28zsC2DA-4.woff2') format('woff2');
+  font-weight: bold;
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  src: local('Sarabun Bold'), local('Sarabun-Bold'), url('https://fonts.gstatic.com/s/sarabun/v13/dtTkJxB5q28zsC2DA-4.woff2') format('woff2');
+  font-weight: bold;
+}
+
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --brand: #4F0080;
+    --brand2: #6B00AD;
+    --brand3: #8B2FC9;
+    --dark: #2B0043;
+    --bg: #F6F3FA;
+    --card: #FFFFFF;
+    --line: #E7DEF0;
+    --ink: #241033;
+    --muted: #7A6A88;
+    --ok: #1F8A5B;
+    --warn: #C97A00;
+    --err: #B4003C;
+
+    /* Official letter standard (Micro-Layout MS Word specifications) */
+    --doc-font-size: 16pt;
+    --mT: 1.5cm;
+    --mB: 1.8cm;
+    --mL: 3.0cm;
+    --mR: 2.0cm;
+    --rTab: 1.5cm;
+    --rIndent: 2.5cm;
+    --rDate: 8.2cm;
+    --rAddr: 8.5cm;
+    --rAddrRight: -2.08cm;
+    --bleed: 1.5cm;
+    --logoH: 3.0cm;
+    --fs: var(--doc-font-size, 16pt);
+    --lh: 1.15;
+    --pgap: 0pt;
+    --lsp: -0.2px;
+    --wsp: 0px;
+    --shift: -1.0cm; /* (mL 3.0cm - mR 2.0cm = 1.0cm shift for 50% page width alignment) */
+    --zoom: 1;
+  }
+
+  body {
+    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #F1EBF7;
+}
+::-webkit-scrollbar-thumb {
+  background: #D3C4E0;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BCA6CE;
+}
+
+/* ============ RESPONSIVE PREVIEW SCALE CONTAINER & A4 DOCUMENT ============ */
+/* ย่อแผ่นกระดาษ A4 บนหน้าจอให้ได้สัดส่วนสมจริง ไม่ใหญ่ล้นจอ */
+.preview-container,
+.preview-window-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px 16px;
+  background-color: #F4EEF9;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+/* คอนเทนเนอร์แสดงผล A4 เสมือนจริงบนหน้าจอ (96 DPI Standard) */
+.a4-document-page,
+.a4-page {
+  position: relative;
+  width: 794px !important;            /* ขนาด A4 กว้าง 210mm ที่ 96 DPI */
+  min-height: 1123px !important;        /* ขนาด A4 สูง 297mm ที่ 96 DPI */
+  padding-top: 57px !important;         /* ขอบบน 1.5 cm */
+  padding-bottom: 68px !important;      /* ขอบล่าง 1.8 cm */
+  padding-left: 113px !important;       /* ขอบซ้าย 3.0 cm */
+  padding-right: 76px !important;       /* ขอบขวา 2.0 cm */
+  box-sizing: border-box !important;
+  margin: 0 auto;
+  background: #ffffff !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  letter-spacing: var(--lsp, -0.2px) !important;
+  word-spacing: var(--wsp, 0px) !important;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "kern" 1, "liga" 1, "mark" 1, "mkmk" 1;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ล็อกขนาดฟอนต์ Sarabun 16pt บนจอภาพ = 21.33px */
+.a4-document-page,
+.a4-document-page *,
+.a4-page,
+.a4-page * {
+  font-family: 'Sarabun', 'TH Sarabun PSK', sans-serif !important;
+  font-size: 21.33px !important;
+  line-height: 1.15 !important;
+  color: #000000 !important;
+  word-break: break-word;
+}
+
+/* 3. จัดการ 2 บรรทัดล่างสุดให้ชิดซ้ายและขนาด 16pt / 21.33px */
+.a4-footer,
+.document-footer {
+  margin-top: 24pt !important;
+  margin-bottom: 0 !important;
+  text-align: left !important;
+}
+.a4-footer,
+.a4-footer div,
+.a4-footer span,
+.a4-footer p,
+.document-footer,
+.document-footer div,
+.document-footer span,
+.document-footer p {
+  font-family: 'Sarabun', 'TH Sarabun PSK', sans-serif !important;
+  font-size: 21.33px !important;
+  line-height: 1.15 !important;
+  color: #000000 !important;
+}
+
+/* ยกเว้น Rulers และ Guide Badges / Tooltips ไม่ให้ถูกทับด้วยฟอนต์ 16pt */
+.a4-page .guide-badge,
+.a4-page .guide-badge *,
+.a4-document-page .guide-badge,
+.a4-document-page .guide-badge *,
+.a4-document-page .guide-line-v span,
+.a4-document-page .guide-line-h span,
+.a4-document-page .no-print span,
+.a4-document-page .no-print div {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 8px !important;
+  line-height: 1 !important;
+}
+
+/* 3. EXACT ELEMENT MAPPING (ปรับตำแหน่งพิกัด HTML ให้เท่า Word) */
+/* สถานที่ออกหนังสือ (8.5 cm): margin-left: 8.5cm; margin-right: -2.08cm; */
+.address-institution {
+  margin-right: -2.08cm;
+}
+div:not(.flex) > .address-institution,
+.address-block-standalone {
+  margin-left: 8.5cm;
+  margin-right: -2.08cm;
+}
+
+/* บรรทัดเดือน/ปี (8.2 cm): margin-left: 8.2cm; */
+.date-line {
+  margin-left: 8.2cm;
+}
+
+/* ย่อหน้าเนื้อหาหลัก: text-indent: 2.5cm; text-align: justify; text-justify: inter-cluster; */
+.body-paragraph,
+p.doc-body {
+  text-indent: 2.5cm;
+  text-align: justify;
+  text-justify: inter-cluster;
+}
+
+/* ส่วนลงท้าย (ขอแสดงความนับถือ + ชื่อคณบดี): text-align: center; margin: 0 auto; width: 100%; */
+.signoff-block {
+  text-align: center;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.center-axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 1px dashed #E0245E;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Word Ruler & Coordinate Alignment Guides */
+.guide-line-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.guide-line-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.guide-badge {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.page-center {
+  text-align: center;
+  margin-right: var(--shift);
+}
+
+/* บล็อกที่อยู่สถาบัน (จัดระนาบเดียวกับ เลขที่ อว. พอดี 100%) */
+.address-block {
+  margin-left: 0;
+  margin-right: -2.08cm;
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 1.15;
+}
+
+.body-paragraph {
+  text-indent: 2.5cm;
+  margin-top: 12pt;
+  margin-bottom: 0pt;
+  line-height: var(--lh, 1.15);
+  text-align: var(--text-align, justify);
+  text-justify: var(--text-justify, inter-cluster);
+  text-align-last: var(--text-align-last, left);
+  line-break: var(--line-break, strict);
+  -webkit-line-break: var(--line-break, strict);
+  word-break: var(--word-break, break-word);
+  overflow-wrap: break-word;
+  letter-spacing: var(--lsp, -0.2px);
+  word-spacing: var(--wsp, 0px);
+}
+
+p.doc-body {
+  text-indent: 2.5cm;
+  margin-top: 12pt;
+  margin-bottom: 0pt;
+  line-height: var(--lh, 1.15);
+  text-align: var(--text-align, justify);
+  text-justify: var(--text-justify, inter-cluster);
+  text-align-last: var(--text-align-last, left);
+  line-break: var(--line-break, strict);
+  -webkit-line-break: var(--line-break, strict);
+  word-break: var(--word-break, break-word);
+  overflow-wrap: break-word;
+  letter-spacing: var(--lsp, -0.2px);
+  word-spacing: var(--wsp, 0px);
+}
+
+table.sched-doc {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.25cm;
+  font-size: var(--fs);
+  line-height: 1.25;
+  letter-spacing: var(--lsp);
+  word-spacing: var(--wsp);
+}
+
+table.sched-doc th,
+table.sched-doc td {
+  border: 1px solid #000000;
+  padding: 3px 6px;
+  vertical-align: top;
+}
+
+table.sched-doc th {
+  text-align: center;
+  font-weight: 700;
+  background-color: #FAFAFA;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0; /* ให้ Padding ของ .a4-document-page คุมระยะขอบแทน */
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .preview-window-container, 
+  .preview-container,
+  .a4-document-page, 
+  .a4-page,
+  .a4-document-page *,
+  .a4-page * {
+    visibility: visible;
+  }
+  #preview-viewport {
+    zoom: 1 !important;
+    transform: none !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .preview-window-container,
+  .preview-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+    height: 297mm;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+  .a4-document-page,
+  .a4-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    transform: none !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .no-print,
+  .no-print-ui,
+  .sidebar,
+  .topbar,
+  header,
+  aside,
+  nav,
+  .center-axis,
+  .guide-line-v,
+  .guide-line-h,
+  .guide-badge {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
