@@ -78,7 +78,7 @@ export const ROOM_RULES: RoomRule[] = [
     rooms: ["DT01", "DT03"],
     split: true,
     invigilators: 4,
-    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
     id: "dt01-dt05",
@@ -86,7 +86,7 @@ export const ROOM_RULES: RoomRule[] = [
     rooms: ["DT01", "DT05"],
     split: true,
     invigilators: 4,
-    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
     id: "dt03-dt05",
@@ -94,7 +94,7 @@ export const ROOM_RULES: RoomRule[] = [
     rooms: ["DT03", "DT05"],
     split: true,
     invigilators: 4,
-    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
     id: "lecture1-lecture3",
