@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { PlannedModule } from "@/components/common/planned-module";
+import { ExamsScreen } from "@/components/exams/exams-screen";
 
-export const metadata: Metadata = { title: "ตารางสอบ" };
+export const metadata: Metadata = { title: "ตารางสอบและกรรมการคุมสอบ" };
 
 export default function Page() {
-  return <PlannedModule id="exams" />;
+  return <ExamsScreen />;
 }

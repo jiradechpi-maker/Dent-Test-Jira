@@ -42,6 +42,14 @@ export const INVIGILATORS: Invigilator[] = [
   priority: B55_PRIORITY.has(nickname),
 }));
 
+/** Former invigilators: kept in the hours history, never suggested for new exams. */
+export const RESIGNED_INVIGILATORS = ["Oil", "Jeab"];
+
+/** Main building for a cohort's exams: years 1–2 sit in building 55, years 3+ in the clinic building. */
+export function buildingForYear(year: number | null): Building {
+  return year !== null && year <= 2 ? "B55" : "CLINIC";
+}
+
 export interface RoomRule {
   id: string;
   building: Building;
@@ -51,38 +59,66 @@ export interface RoomRule {
   note: string;
 }
 
+/**
+ * Room options in order of preference. Room 401 holds a whole cohort (≤ 30 students). Every other option is
+ * two rooms in one building used together, half the cohort in each. Names match the invigilation sheet.
+ */
 export const ROOM_RULES: RoomRule[] = [
-  {
-    id: "b55",
-    building: "B55",
-    rooms: ["DT01", "DT03"],
-    split: true,
-    invigilators: 4,
-    note: "แบ่ง 2 ห้องเสมอ (DT01 + DT03) ห้องละ 2 คน",
-  },
   {
     id: "conf401",
     building: "CLINIC",
     rooms: ["Conference room 1 (401)"],
     split: false,
     invigilators: 2,
-    note: "รับได้ทั้งชั้นปี ไม่แบ่งห้อง",
+    note: "ตึกคลินิก · รับได้ทั้งชั้นปี (ไม่เกิน 30 คน) ไม่ต้องแบ่งห้อง",
   },
   {
-    id: "lecture13",
+    id: "dt01-dt03",
+    building: "B55",
+    rooms: ["DT01", "DT03"],
+    split: true,
+    invigilators: 4,
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "dt01-dt05",
+    building: "B55",
+    rooms: ["DT01", "DT05"],
+    split: true,
+    invigilators: 4,
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "dt03-dt05",
+    building: "B55",
+    rooms: ["DT03", "DT05"],
+    split: true,
+    invigilators: 4,
+    note: "ตึก 55 ชั้น 8 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "lecture1-lecture3",
     building: "CLINIC",
     rooms: ["Lecture 1", "Lecture 3"],
     split: true,
     invigilators: 4,
-    note: "ใช้คู่กัน แบ่ง 2 ห้อง ห้องละ 2 คน",
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
-    id: "lab12",
+    id: "lecture1-lab",
     building: "CLINIC",
-    rooms: ["Common Lab 1", "Common Lab 2"],
+    rooms: ["Lecture 1", "Common Lab"],
     split: true,
     invigilators: 4,
-    note: "ใช้คู่กัน แบ่ง 2 ห้อง ห้องละ 2 คน",
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "lecture3-lab",
+    building: "CLINIC",
+    rooms: ["Lecture 3", "Common Lab"],
+    split: true,
+    invigilators: 4,
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
 ];
 
