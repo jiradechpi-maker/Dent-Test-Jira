@@ -42,47 +42,65 @@ export const INVIGILATORS: Invigilator[] = [
   priority: B55_PRIORITY.has(nickname),
 }));
 
+/** Former invigilators: kept in the hours history, never suggested for new exams. */
+export const RESIGNED_INVIGILATORS = ["Oil", "Jeab"];
+
+/** Main building for a cohort's exams: years 1–2 sit in building 55, years 3+ in the clinic building. */
+export function buildingForYear(year: number | null): Building {
+  return year !== null && year <= 2 ? "B55" : "CLINIC";
+}
+
 export interface RoomRule {
   id: string;
   building: Building;
+  /** Floor both rooms are on; null = not confirmed yet. */
+  floor: number | null;
   rooms: string[];
   split: boolean;
   invigilators: number;
   note: string;
 }
 
+/**
+ * Room options in order of preference. Room 401 holds a whole cohort; every other option is two rooms on
+ * the same floor used together, so the cohort does not walk between floors. Names match the invigilation sheet.
+ */
 export const ROOM_RULES: RoomRule[] = [
-  {
-    id: "b55",
-    building: "B55",
-    rooms: ["DT01", "DT03"],
-    split: true,
-    invigilators: 4,
-    note: "แบ่ง 2 ห้องเสมอ (DT01 + DT03) ห้องละ 2 คน",
-  },
   {
     id: "conf401",
     building: "CLINIC",
+    floor: 4,
     rooms: ["Conference room 1 (401)"],
     split: false,
     invigilators: 2,
-    note: "รับได้ทั้งชั้นปี ไม่แบ่งห้อง",
+    note: "รับได้ทั้งชั้นปี ไม่ต้องแบ่งห้อง",
+  },
+  {
+    id: "b55",
+    building: "B55",
+    floor: 8,
+    rooms: ["DT01", "DT03"],
+    split: true,
+    invigilators: 4,
+    note: "ชั้น 8 · ใช้คู่กันเสมอ ห้องละ 2 คน",
   },
   {
     id: "lecture13",
     building: "CLINIC",
+    floor: null,
     rooms: ["Lecture 1", "Lecture 3"],
     split: true,
     invigilators: 4,
-    note: "ใช้คู่กัน แบ่ง 2 ห้อง ห้องละ 2 คน",
+    note: "ชั้นเดียวกัน · ใช้คู่กัน ห้องละ 2 คน",
   },
   {
-    id: "lab12",
+    id: "classroom-lab",
     building: "CLINIC",
-    rooms: ["Common Lab 1", "Common Lab 2"],
+    floor: null,
+    rooms: ["Classroom 1", "Common Lab"],
     split: true,
     invigilators: 4,
-    note: "ใช้คู่กัน แบ่ง 2 ห้อง ห้องละ 2 คน",
+    note: "ชั้นเดียวกัน · ใช้คู่กัน ห้องละ 2 คน",
   },
 ];
 

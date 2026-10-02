@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CircleAlert, Users } from "lucide-react";
-import { INVIGILATORS } from "@/config/master-data";
+import { INVIGILATORS, RESIGNED_INVIGILATORS } from "@/config/master-data";
 import { mediumDay, timeSpan } from "@/lib/schedule/format";
 import { invigilatorLoads } from "@/lib/schedule/load";
 import { todayInBangkok } from "@/lib/thai";
@@ -21,7 +21,9 @@ export function InvigilatorsScreen() {
   const [today] = useState(() => todayInBangkok());
   const [selected, setSelected] = useState<string | null>(null);
   const book = invigilation?.ok ? invigilation.data : null;
-  const loads = useMemo(() => (book ? invigilatorLoads(book) : []), [book]);
+  const allLoads = useMemo(() => (book ? invigilatorLoads(book) : []), [book]);
+  const loads = allLoads.filter((load) => !RESIGNED_INVIGILATORS.includes(load.name));
+  const resigned = allLoads.filter((load) => RESIGNED_INVIGILATORS.includes(load.name));
   const max = Math.max(1, ...loads.map((load) => load.total));
   const average = loads.length ? loads.reduce((sum, load) => sum + load.total, 0) / loads.length : 0;
   const person = loads.find((load) => load.name === selected) ?? null;
@@ -93,6 +95,11 @@ export function InvigilatorsScreen() {
                   </li>
                 ))}
               </ul>
+              {resigned.length ? (
+                <p className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
+                  ลาออกแล้ว (ไม่นับในการจัดงาน): {resigned.map((load) => `${load.name} ${load.total} ชม.`).join(" · ")}
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

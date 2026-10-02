@@ -43,3 +43,14 @@ if (values.teaching && values.invigilation) {
   const issues = sortIssues([...findExamClashes(book.entries), ...findIncompleteExams(book.entries, "2026-10-02"), ...crossCheckYear(book, teaching, 4)]);
   for (const issue of issues) console.log(issue.severity.padEnd(7), issue.kind.padEnd(20), issue.date, "|", issue.title, "|", issue.detail);
 }
+
+if (values.invigilation) {
+  const { findExamClashes, findIncompleteExams, sortIssues } = await import("../src/lib/schedule/checks");
+  const { parseInvigilationWorkbook } = await import("../src/lib/schedule/invigilation");
+  const { invigilatorLoads } = await import("../src/lib/schedule/load");
+  const { withSuggestions } = await import("../src/lib/schedule/suggest");
+  const book = parseInvigilationWorkbook(await readWorkbook(readFileSync(values.invigilation)));
+  const today = "2026-10-03";
+  const issues = withSuggestions(sortIssues([...findExamClashes(book.entries), ...findIncompleteExams(book.entries, today)]), book.entries, invigilatorLoads(book));
+  for (const issue of issues.filter((i) => i.suggestion)) console.log("SUGGEST", issue.date, issue.title, "|", issue.detail, "\n   →", issue.suggestion);
+}

@@ -5,6 +5,8 @@ import { ClipboardList, FileCheck2, MoveRight } from "lucide-react";
 import { MY_YEAR } from "@/config/data-sources";
 import { crossCheckYear, findExamClashes, findIncompleteExams, sortIssues, type IssueSeverity } from "@/lib/schedule/checks";
 import { examSnapshot } from "@/lib/schedule/diff";
+import { invigilatorLoads } from "@/lib/schedule/load";
+import { withSuggestions } from "@/lib/schedule/suggest";
 import { mediumDay, shortDay, timeSpan } from "@/lib/schedule/format";
 import type { ExamEntry } from "@/lib/schedule/invigilation";
 import { THAI_MONTHS, todayInBangkok } from "@/lib/thai";
@@ -45,7 +47,7 @@ export function ExamsScreen() {
       ...findIncompleteExams(book.entries, today),
       ...(teaching?.ok ? crossCheckYear(book, teaching.data, MY_YEAR).filter((issue) => !issue.date || issue.date >= today) : []),
     ];
-    return sortIssues(all);
+    return withSuggestions(sortIssues(all), book.entries, invigilatorLoads(book));
   }, [book, teaching, today]);
   const shownIssues = severity === "all" ? issues : issues.filter((issue) => issue.severity === severity);
 

@@ -1,4 +1,4 @@
-import { CircleAlert, Info, TriangleAlert } from "lucide-react";
+import { CircleAlert, Info, Lightbulb, TriangleAlert } from "lucide-react";
 import type { ScheduleIssue } from "@/lib/schedule/checks";
 import { shortDay } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,12 @@ export function IssueList({ issues, empty }: { issues: ScheduleIssue[]; empty?: 
                 {issue.date ? <span className="ml-2 text-xs font-normal text-muted-foreground tabular">{shortDay(issue.date)}</span> : null}
               </p>
               <p className="mt-0.5 text-xs break-words text-muted-foreground">{issue.detail}</p>
+              {issue.suggestion ? (
+                <p className="mt-1 flex items-start gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-xs text-brand-800">
+                  <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>{issue.suggestion}</span>
+                </p>
+              ) : null}
             </div>
           </li>
         );

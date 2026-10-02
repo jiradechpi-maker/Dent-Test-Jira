@@ -1,4 +1,5 @@
 import { rangesOverlap, titleTokens } from "@/lib/sheets/text";
+import { RESIGNED_INVIGILATORS } from "@/config/master-data";
 import { shortDay, timeSpan } from "./format";
 import type { ExamEntry, InvigilationBook } from "./invigilation";
 import type { TeachingSchedule, TeachingSession } from "./teaching";
@@ -15,7 +16,7 @@ export type IssueKind =
   | "date-mismatch"
   | "time-mismatch"
   | "not-in-invigilation"
-  | "sheet-typo";
+  | "resigned-invigilator";
 
 export interface ScheduleIssue {
   id: string;
@@ -26,6 +27,8 @@ export interface ScheduleIssue {
   detail: string;
   examIds: string[];
   sessionIds: string[];
+  /** What to do about it, e.g. free rooms and the least-loaded free invigilators. */
+  suggestion?: string;
 }
 
 const sameRoom = (a: string, b: string) => a.replace(/\s+/g, "").toLowerCase() === b.replace(/\s+/g, "").toLowerCase();
@@ -99,6 +102,19 @@ export function findIncompleteExams(entries: ExamEntry[], today: string): Schedu
         sessionIds: [],
       });
       continue;
+    }
+    const resigned = entry.invigilators.filter((name) => RESIGNED_INVIGILATORS.includes(name));
+    if (resigned.length > 0) {
+      issues.push({
+        id: `resigned:${entry.id}`,
+        kind: "resigned-invigilator",
+        severity: "danger",
+        date: entry.date,
+        title: `มีกรรมการที่ลาออกแล้ว: ${resigned.join(", ")}`,
+        detail: `${label(entry)} · ${timeSpan(entry.start, entry.end)}`,
+        examIds: [entry.id],
+        sessionIds: [],
+      });
     }
     const missing = [entry.rooms.length === 0 ? "ห้องสอบ" : null, entry.invigilators.length === 0 ? "กรรมการคุมสอบ" : null].filter(Boolean);
     if (missing.length > 0) {

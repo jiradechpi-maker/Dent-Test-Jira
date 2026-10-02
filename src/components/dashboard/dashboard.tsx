@@ -2,24 +2,26 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, CircleDashed, CheckCircle2, Mail, Timer } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleDashed, CheckCircle2, ClipboardList, Mail, Timer } from "lucide-react";
 import { NAV_ITEMS } from "@/config/navigation";
 import { DAY_COLORS } from "@/config/master-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ServiceStatusList } from "@/components/system/service-status";
+import { TodayTasks } from "./today-tasks";
+import { todayInBangkok } from "@/lib/thai";
 import { cn } from "@/lib/utils";
 
 const PHASES = [
   { phase: 0, title: "โครงระบบ + Design system + ⌘K", done: true },
   { phase: 1, title: "ฐานข้อมูล + ตารางสอนหลัก + Excel", done: false },
   { phase: 2, title: "Document engine + หนังสือเชิญ (พร้อมใช้ · คลังแม่แบบบน Supabase ตามมากับฐานข้อมูล)", done: true },
-  { phase: 3, title: "ตารางสอบ + จัดห้อง + กรรมการคุมสอบ", done: false },
+  { phase: 3, title: "ตารางสอบ + เสนอห้อง/กรรมการ + ชั่วโมงคุมสอบ (พร้อมใช้ · จัดอัตโนมัติเต็มรูปแบบตามมา)", done: true },
   { phase: 4, title: "คลังข้อสอบ Kanban + T-7 + ใบปะหน้า", done: false },
   { phase: 5, title: "Reconciliation + ใบลงเวลา + ฉบับแก้ไข", done: false },
   { phase: 6, title: "หาวันว่าง + Cascade shift", done: false },
-  { phase: 7, title: "ซิงก์ Google Sheets", done: false },
+  { phase: 7, title: "ซิงก์ Google Drive (ตารางสอนปี 4 + ตารางคุมสอบ)", done: true },
   { phase: 8, title: "รายงาน + เอกสารคู่มือ", done: false },
 ];
 
@@ -27,7 +29,8 @@ function TodayCard() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   if (!now) return <Skeleton className="h-[120px] w-full rounded-[var(--radius-card)]" />;
-  const day = DAY_COLORS[now.getDay()] ?? DAY_COLORS[0];
+  const weekday = new Date(`${todayInBangkok(now)}T00:00:00Z`).getUTCDay();
+  const day = DAY_COLORS[weekday] ?? DAY_COLORS[0];
   const dateText = new Intl.DateTimeFormat("th-TH-u-ca-buddhist", {
     weekday: "long",
     day: "numeric",
@@ -54,6 +57,18 @@ function TodayCard() {
 
 const QUICK_ACTIONS = [
   {
+    href: "/schedule",
+    icon: CalendarDays,
+    title: "ตารางสอนชั้นปี 4",
+    description: "ซิงก์จาก Google Drive · ดูรายสัปดาห์ ค้นหาอาจารย์",
+  },
+  {
+    href: "/exams",
+    icon: ClipboardList,
+    title: "ตารางสอบ & สิ่งที่ต้องตรวจ",
+    description: "ห้องชน กรรมการซ้อน พร้อมห้อง/กรรมการที่เสนอให้",
+  },
+  {
     href: "/documents/invitations",
     icon: Mail,
     title: "ออกหนังสือเชิญอาจารย์พิเศษ",
@@ -74,6 +89,7 @@ export function Dashboard() {
     <div className="grid gap-5 lg:grid-cols-3">
       <div className="flex flex-col gap-5 lg:col-span-2">
         <TodayCard />
+        <TodayTasks />
 
         <div className="grid gap-3 sm:grid-cols-2">
           {QUICK_ACTIONS.map((action) => {
