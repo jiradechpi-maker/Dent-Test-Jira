@@ -1,0 +1,116 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Command } from "cmdk";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import { CornerDownLeft, PanelLeft, Search } from "lucide-react";
+import { NAV_GROUPS } from "@/config/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Kbd } from "@/components/ui/kbd";
+import { useUiStore } from "@/stores/ui-store";
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+export function CommandPalette() {
+  const router = useRouter();
+  const open = useUiStore((s) => s.commandOpen);
+  const setOpen = useUiStore((s) => s.setCommandOpen);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpen(!useUiStore.getState().commandOpen);
+        return;
+      }
+      if (event.key === "[" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target)) {
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setOpen, toggleSidebar]);
+
+  const run = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-neutral-900/40 backdrop-blur-[2px] animate-fade-in" />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className="fixed top-[14vh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-[var(--radius-modal)] border border-border bg-card shadow-[var(--shadow-lg)] outline-none animate-fade-in"
+        >
+          <DialogPrimitive.Title className="sr-only">ค้นหาและคำสั่ง</DialogPrimitive.Title>
+          <Command label="ค้นหาและคำสั่ง" loop className="flex flex-col">
+            <div className="flex items-center gap-2 border-b border-border px-4">
+              <Search className="size-4 shrink-0 text-neutral-400" aria-hidden />
+              <Command.Input
+                autoFocus
+                placeholder="พิมพ์ชื่อเมนูหรือคำสั่ง เช่น หนังสือเชิญ, จับเวลา…"
+                className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400"
+              />
+              <Kbd>Esc</Kbd>
+            </div>
+            <Command.List className="max-h-[min(60vh,420px)] overflow-y-auto p-2 scrollbar-thin">
+              <Command.Empty className="px-3 py-8 text-center text-sm text-muted-foreground">ไม่พบเมนูที่ค้นหา</Command.Empty>
+              {NAV_GROUPS.map((group) => (
+                <Command.Group
+                  key={group.label}
+                  heading={group.label}
+                  className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-neutral-400"
+                >
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Command.Item
+                        key={item.id}
+                        value={`${item.label} ${item.description} ${(item.keywords ?? []).join(" ")}`}
+                        onSelect={() => run(() => router.push(item.href))}
+                        className="group flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] px-2 py-2 text-[13px] data-[selected=true]:bg-brand-50 data-[selected=true]:text-brand-900"
+                      >
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-neutral-500 group-data-[selected=true]:border-brand-200 group-data-[selected=true]:text-brand-700">
+                          <Icon className="size-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{item.label}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                        </span>
+                        {item.status === "planned" ? <Badge>Phase {item.phase}</Badge> : null}
+                        <CornerDownLeft className="size-3.5 text-neutral-400 opacity-0 group-data-[selected=true]:opacity-100" aria-hidden />
+                      </Command.Item>
+                    );
+                  })}
+                </Command.Group>
+              ))}
+              <Command.Group
+                heading="คำสั่ง"
+                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-neutral-400"
+              >
+                <Command.Item
+                  value="ย่อ ขยาย แถบเมนู sidebar toggle"
+                  onSelect={() => run(toggleSidebar)}
+                  className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] px-2 py-2 text-[13px] data-[selected=true]:bg-brand-50 data-[selected=true]:text-brand-900"
+                >
+                  <span className="flex size-7 items-center justify-center rounded-md border border-border bg-card text-neutral-500">
+                    <PanelLeft className="size-4" aria-hidden />
+                  </span>
+                  <span className="flex-1 font-medium">ย่อ / ขยายแถบเมนู</span>
+                  <Kbd>[</Kbd>
+                </Command.Item>
+              </Command.Group>
+            </Command.List>
+          </Command>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}

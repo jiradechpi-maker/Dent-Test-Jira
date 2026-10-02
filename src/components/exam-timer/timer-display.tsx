@@ -1,0 +1,152 @@
+"use client";
+
+import { forwardRef } from "react";
+import { cn } from "@/lib/utils";
+import {
+  formatClock,
+  formatCountdown,
+  formatDurationThai,
+  phaseAt,
+  progressAt,
+  remainingMs,
+  urgencyAt,
+  type ExamSession,
+  type Urgency,
+} from "@/lib/exam-timer/timing";
+
+export type DisplayTheme = "dark" | "light";
+
+const URGENCY_TEXT: Record<DisplayTheme, Record<Urgency, string>> = {
+  dark: {
+    calm: "text-white",
+    notice: "text-amber-300",
+    warning: "text-orange-400",
+    critical: "text-rose-400",
+    ended: "text-rose-400",
+  },
+  light: {
+    calm: "text-neutral-900",
+    notice: "text-amber-600",
+    warning: "text-orange-600",
+    critical: "text-rose-600",
+    ended: "text-rose-600",
+  },
+};
+
+const URGENCY_BAR: Record<Urgency, string> = {
+  calm: "bg-brand-500",
+  notice: "bg-amber-400",
+  warning: "bg-orange-500",
+  critical: "bg-rose-500",
+  ended: "bg-rose-500",
+};
+
+export interface TimerDisplayProps {
+  session: ExamSession | null;
+  now: number;
+  title: string;
+  room: string;
+  theme: DisplayTheme;
+  fullscreen: boolean;
+  children?: React.ReactNode;
+}
+
+/** The projector-facing screen. Sizes itself to its container with container-query units. */
+export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(function TimerDisplay(
+  { session, now, title, room, theme, fullscreen, children },
+  ref,
+) {
+  const dark = theme === "dark";
+  const phase = session ? phaseAt(session, now) : null;
+  const urgency: Urgency = session ? urgencyAt(session, now) : "calm";
+  const remaining = session ? remainingMs(session, now) : 0;
+  const progress = session ? progressAt(session, now) : 0;
+  const justEnded = session !== null && phase === "ended" && now - session.endAt < 12_000;
+
+  const label =
+    phase === "waiting"
+      ? { th: "จะเริ่มสอบในอีก", en: "Exam begins in" }
+      : phase === "running"
+        ? { th: "เหลือเวลาสอบ", en: "Time remaining" }
+        : phase === "ended"
+          ? { th: "หมดเวลาสอบ", en: "Time is up" }
+          : { th: "พร้อมจับเวลา", en: "Ready" };
+
+  return (
+    <div
+      ref={ref}
+      role="timer"
+      aria-live="off"
+      aria-label={`${label.th} ${session ? formatCountdown(remaining) : ""}`}
+      className={cn(
+        "@container relative flex min-h-0 flex-col overflow-hidden select-none",
+        fullscreen ? "h-dvh w-screen rounded-none" : "aspect-video w-full rounded-[var(--radius-card)]",
+        dark ? "bg-[radial-gradient(120%_120%_at_50%_0%,#2a0f4d_0%,#150a26_55%,#0c0616_100%)] text-white" : "bg-white text-neutral-900 ring-1 ring-border",
+        fullscreen && "cursor-none [&:hover]:cursor-default",
+      )}
+    >
+      {justEnded ? (
+        <div aria-hidden className={cn("pointer-events-none absolute inset-0 animate-pulse-soft", dark ? "bg-rose-600/25" : "bg-rose-500/15")} />
+      ) : null}
+      {/* Header: exam title + live clock */}
+      <div className="flex items-start justify-between gap-[3cqw] px-[4cqw] pt-[3cqw]">
+        <div className="min-w-0">
+          <p className={cn("truncate text-[3.4cqw] leading-tight font-semibold", dark ? "text-white" : "text-neutral-900")}>
+            {title || "การสอบ"}
+          </p>
+          {room ? <p className={cn("mt-[0.4cqw] truncate text-[2.2cqw]", dark ? "text-white/60" : "text-neutral-500")}>{room}</p> : null}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className={cn("text-[1.6cqw] tracking-wide uppercase", dark ? "text-white/50" : "text-neutral-400")}>เวลาปัจจุบัน · Now</p>
+          <p className="font-[family-name:var(--font-latin)] text-[4cqw] leading-none font-semibold tabular">{now > 0 ? formatClock(now, true) : "--:--:--"}</p>
+        </div>
+      </div>
+
+      {/* Main countdown */}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[4cqw]">
+        <p className={cn("text-[2.6cqw] font-medium", dark ? "text-white/70" : "text-neutral-500")}>
+          {label.th} <span className="font-[family-name:var(--font-latin)] opacity-70">· {label.en}</span>
+        </p>
+        {phase === "ended" ? (
+          <div className="mt-[1cqw] text-center">
+            <p className={cn("text-[11cqw] leading-[1.05] font-bold", URGENCY_TEXT[theme].ended)}>หมดเวลา</p>
+            <p className={cn("mt-[1cqw] text-[3.2cqw] font-medium", dark ? "text-white/85" : "text-neutral-700")}>
+              กรุณาวางปากกา <span className="font-[family-name:var(--font-latin)]">· Please stop writing</span>
+            </p>
+          </div>
+        ) : (
+          <p
+            className={cn(
+              "font-[family-name:var(--font-latin)] leading-none font-semibold tracking-[-0.03em] tabular transition-colors duration-500",
+              remaining >= 3_600_000 ? "text-[17cqw]" : "text-[22cqw]",
+              session ? URGENCY_TEXT[theme][urgency] : dark ? "text-white/30" : "text-neutral-300",
+              urgency === "critical" && "animate-pulse-soft",
+            )}
+          >
+            {session ? formatCountdown(remaining) : "--:--"}
+          </p>
+        )}
+      </div>
+
+      {/* Footer: schedule + progress */}
+      <div className="px-[4cqw] pb-[3cqw]">
+        <div className={cn("flex items-center justify-between gap-[2cqw] text-[2.2cqw]", dark ? "text-white/70" : "text-neutral-600")}>
+          <span>
+            เริ่ม <b className="font-[family-name:var(--font-latin)] font-semibold tabular">{session ? formatClock(session.startAt) : "--:--"}</b>
+            <span className="mx-[1.2cqw] opacity-40">•</span>
+            เลิก <b className="font-[family-name:var(--font-latin)] font-semibold tabular">{session ? formatClock(session.endAt) : "--:--"}</b>
+          </span>
+          <span>{session ? `รวม ${formatDurationThai(session.endAt - session.startAt)}` : ""}</span>
+        </div>
+        <div className={cn("mt-[1.2cqw] h-[0.9cqw] min-h-1 w-full overflow-hidden rounded-full", dark ? "bg-white/10" : "bg-neutral-100")}>
+          <div
+            className={cn("h-full rounded-full transition-[width] duration-700 ease-linear", URGENCY_BAR[urgency])}
+            style={{ width: `${phase === "waiting" ? 0 : progress * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {children}
+    </div>
+  );
+});
