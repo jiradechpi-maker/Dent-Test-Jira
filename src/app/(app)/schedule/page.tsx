@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { PlannedModule } from "@/components/common/planned-module";
+import { ScheduleScreen } from "@/components/schedule/schedule-screen";
 
-export const metadata: Metadata = { title: "ตารางสอนหลัก" };
+export const metadata: Metadata = { title: "ตารางสอนชั้นปี 4" };
 
 export default function Page() {
-  return <PlannedModule id="schedule" />;
+  return <ScheduleScreen />;
 }

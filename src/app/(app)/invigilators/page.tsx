@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { PlannedModule } from "@/components/common/planned-module";
+import { InvigilatorsScreen } from "@/components/invigilators/invigilators-screen";
 
-export const metadata: Metadata = { title: "กรรมการคุมสอบ" };
+export const metadata: Metadata = { title: "ชั่วโมงคุมสอบ" };
 
 export default function Page() {
-  return <PlannedModule id="invigilators" />;
+  return <InvigilatorsScreen />;
 }
