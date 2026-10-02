@@ -24,9 +24,9 @@ describe("invitation template data", () => {
   it("matches the original letter's wording and numbers", () => {
     const data = buildInvitationTemplateData(invitationSchema.parse(SAMPLE_INVITATION));
     expect(data.documentPrefix).toBe("อว ๗๐๓๓");
-    expect(data.coordinatorShort).toBe("น.ส.พิมพ์พิสุทธิ์ สุธรรมราษฎร์");
-    expect(data.coordinatorFull).toBe("นางสาวพิมพ์พิสุทธิ์ สุธรรมราษฎร์");
-    expect(data.coordinatorPhone).toBe("๐๘๙-๖๑๙๑-๓๒๙");
+    expect(data.coordinatorShort).toBe("นายจิรเดช พิชัย");
+    expect(data.coordinatorFull).toBe("นายจิรเดช พิชัย");
+    expect(data.coordinatorPhone).toBe("๐๙๖-๘๕๙๐-๑๑๐");
     expect(data.venue).toContain("ห้อง DT01 ชั้น ๘ อาคารเฉลิมพระเกียรติ ๕๕ พรรษา");
     expect(data.schedule[0]).toEqual({
       dayDate: "อังคารที่ ๒๙/๐๙/๖๙",
@@ -39,6 +39,14 @@ describe("invitation template data", () => {
     expect(data.examDeadline).toBe("วันจันทร์ที่ ๑๙ ตุลาคม ๒๕๖๙");
     expect(data.issueDate.trim()).toBe("สิงหาคม ๒๕๖๙");
     expect(data.footerPhone).toBe("โทรศัพท์ ๐ ๒๓๒๙ ๘๐๐๐ ต่อ ๒๑๘๙");
+  });
+
+  it("abbreviates นางสาว to น.ส. only in the letter body", () => {
+    const data = buildInvitationTemplateData(
+      invitationSchema.parse({ ...SAMPLE_INVITATION, coordinatorTitle: "นางสาว", coordinatorName: "พิมพ์พิสุทธิ์ สุธรรมราษฎร์" }),
+    );
+    expect(data.coordinatorShort).toBe("น.ส.พิมพ์พิสุทธิ์ สุธรรมราษฎร์");
+    expect(data.coordinatorFull).toBe("นางสาวพิมพ์พิสุทธิ์ สุธรรมราษฎร์");
   });
 
   it("sorts the schedule by date and time", () => {
@@ -77,15 +85,13 @@ describe("rendered .docx", () => {
     const text = documentText(docx);
     const expected = [
       "ที่ อว ๗๐๓๓ /",
-      "สถาบันเทคโนโลยีพระจอมเกล้า",
-      "เจ้าคุณทหารลาดกระบัง",
-      "เลขที่ ๑ ซอยฉลองกรุง ๑",
-      "เขตลาดกระบัง กรุงเทพฯ ๑๐๕๒๐",
+      "สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง\n",
+      "เลขที่ ๑ ซอยฉลองกรุง ๑ เขตลาดกระบัง กรุงเทพฯ ๑๐๕๒๐\n",
       "เรื่อง\tขอเรียนเชิญเป็นอาจารย์พิเศษ รายวิชา Digestive System and Nutrient Function",
       "เรียน\tผู้ช่วยศาสตราจารย์ ดร.ทันตแพทย์อริยะ จันทรมณี",
       "ด้วยคณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง ได้ดำเนินการจัดการเรียนการสอนในรายวิชา Digestive System and Nutrient Function หลักสูตรทันตแพทยศาสตรบัณฑิต (หลักสูตรนานาชาติ) ใช้การเรียนการสอนเป็นภาษาอังกฤษ ภาคการศึกษาที่ ๑ ปีการศึกษา ๒๕๖๙ ให้กับนักศึกษาระดับปริญญาตรีชั้นปีที่ ๒ ณ ห้อง DT01 ชั้น ๘ อาคารเฉลิมพระเกียรติ ๕๕ พรรษา สมเด็จพระเทพรัตนราชสุดาฯ สยามบรมราชกุมารี คณะทันตแพทยศาสตร์ นั้น",
       "ในการนี้ คณะทันตแพทยศาสตร์ ขอเรียนเชิญท่านเป็นอาจารย์พิเศษในรายวิชา Digestive System and Nutrient Function ซึ่งท่านเป็นผู้มีความรู้ ความสามารถ และมีประสบการณ์สูง โดยรายละเอียดปรากฏดังเอกสารที่แนบมาพร้อมนี้",
-      "ทั้งนี้ คณะทันตแพทยศาสตร์ ขอมอบหมายให้ น.ส.พิมพ์พิสุทธิ์ สุธรรมราษฎร์ เป็นผู้ประสานงาน เบอร์โทรศัพท์ ๐๘๙-๖๑๙๑-๓๒๙ E-mail address: pimpisut.su@kmitl.ac.th",
+      "ทั้งนี้ คณะทันตแพทยศาสตร์ ขอมอบหมายให้ นายจิรเดช พิชัย เป็นผู้ประสานงาน เบอร์โทรศัพท์ ๐๙๖-๘๕๙๐-๑๑๐ E-mail address: jiradech.pi@kmitl.ac.th",
       "คณะทันตแพทยศาสตร์ หวังว่าจะได้รับความอนุเคราะห์จากท่าน และขอขอบพระคุณมา ณ โอกาสนี้",
       "ขอแสดงความนับถือ",
       "(รองศาสตราจารย์ ดร.ทันตแพทย์หญิงอารยา พงษ์หาญยุทธ)",
@@ -102,7 +108,7 @@ describe("rendered .docx", () => {
       "กรณีสอนบรรยาย ๖ ชั่วโมง รบกวนขอ ๓๐ คะแนน",
       "ท่านสามารถออกข้อสอบได้ทั้งแบบอัตนัย และปรนัย (๕ ตัวเลือก)",
       "- ขอให้จัดส่งข้อสอบภายใน วันจันทร์ที่ ๑๙ ตุลาคม ๒๕๖๙",
-      "จัดส่งได้ที่ นางสาวพิมพ์พิสุทธิ์ สุธรรมราษฎร์ ซึ่งเป็นผู้ประสานงาน โดยท่านสามารถติดต่อได้ที่หมายเลขโทรศัพท์ ๐๘๙-๖๑๙๑-๓๒๙ E-mail address: pimpisut.su@kmitl.ac.th",
+      "จัดส่งได้ที่ นายจิรเดช พิชัย ซึ่งเป็นผู้ประสานงาน โดยท่านสามารถติดต่อได้ที่หมายเลขโทรศัพท์ ๐๙๖-๘๕๙๐-๑๑๐ E-mail address: jiradech.pi@kmitl.ac.th",
     ];
     for (const line of expected) expect(text).toContain(line);
     expect(text).not.toMatch(/[{}]/);

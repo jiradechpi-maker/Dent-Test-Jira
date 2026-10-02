@@ -49,7 +49,13 @@ const cm = (value: number): number => Math.round((value * 1440) / 2.54);
 const PAGE = { width: 11906, height: 16838 };
 const MARGIN = { top: cm(1.5), bottom: cm(1.8), left: cm(3.0), right: cm(2.0) };
 const CONTENT_WIDTH = PAGE.width - MARGIN.left - MARGIN.right; // 16 cm
-const ADDRESS_COLUMN = cm(8.0); // where the right-hand letterhead block starts
+const ADDRESS_COLUMN = cm(6.5); // where the right-hand letterhead block starts
+/**
+ * The address block may run 1 cm into the right margin (the original letter used a −2.08 cm right indent)
+ * so each address line — institution name, then street address — stays on ONE line.
+ */
+const LETTERHEAD_WIDTH = CONTENT_WIDTH + cm(1.0);
+const DATE_INDENT = cm(8.0);
 const BODY_FIRST_LINE = 1440; // 2.54 cm, as in the original letter
 /**
  * Exact line pitch (twips). Locking it makes MS Word and LibreOffice/Gotenberg break pages identically,
@@ -112,8 +118,8 @@ const emblem = para(
 const zeroCellMargins = { top: 0, bottom: 0, left: 0, right: 0 };
 
 const letterhead = new Table({
-  width: { size: CONTENT_WIDTH, type: WidthType.DXA },
-  columnWidths: [ADDRESS_COLUMN, CONTENT_WIDTH - ADDRESS_COLUMN],
+  width: { size: LETTERHEAD_WIDTH, type: WidthType.DXA },
+  columnWidths: [ADDRESS_COLUMN, LETTERHEAD_WIDTH - ADDRESS_COLUMN],
   layout: TableLayoutType.FIXED,
   borders: NO_BORDERS,
   rows: [
@@ -126,7 +132,7 @@ const letterhead = new Table({
           children: [para([run("ที่ {documentPrefix} / {letterNo}")])],
         }),
         new TableCell({
-          width: { size: CONTENT_WIDTH - ADDRESS_COLUMN, type: WidthType.DXA },
+          width: { size: LETTERHEAD_WIDTH - ADDRESS_COLUMN, type: WidthType.DXA },
           margins: zeroCellMargins,
           borders: NO_BORDERS,
           children: [tagOnly("{#letterheadLines}"), para([run("{text}")]), tagOnly("{/letterheadLines}")],
@@ -137,7 +143,7 @@ const letterhead = new Table({
 });
 
 const issueDate = para([run("{issueDate}")], {
-  indent: { left: ADDRESS_COLUMN },
+  indent: { left: DATE_INDENT },
   spacing: { before: 120, after: 120 },
 });
 
@@ -291,7 +297,8 @@ const examSection = [
         "จัดส่งได้ที่ {coordinatorFull} ซึ่งเป็นผู้ประสานงาน โดยท่านสามารถติดต่อได้ที่หมายเลขโทรศัพท์ {coordinatorPhone} E-mail address: {coordinatorEmail}",
       ),
     ],
-    { alignment: AlignmentType.THAI_DISTRIBUTE, spacing: { before: 240, after: 0 } },
+    // Left-aligned: Thai-distributed spacing stretched this line letter-by-letter in MS Word.
+    { alignment: AlignmentType.LEFT, spacing: { before: 240, after: 0 } },
   ),
   tagOnly("{/hasExam}"),
 ];

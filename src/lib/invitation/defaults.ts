@@ -35,8 +35,8 @@ export function defaultInvitation(today: string = todayInBangkok()): InvitationI
     venue: "",
     coordinatorTitle: "นาย",
     coordinatorName: "จิรเดช พิชัย",
-    coordinatorPhone: "",
-    coordinatorEmail: "",
+    coordinatorPhone: "096-8590-110",
+    coordinatorEmail: "jiradech.pi@kmitl.ac.th",
     schedule: [emptyScheduleItem(today)],
     includeExamSection: true,
     pointsPerHour: 5,
@@ -54,9 +54,16 @@ export function loadDraft(): InvitationInput | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<InvitationInput>;
     const base = defaultInvitation();
+    // Empty coordinator fields in an old draft fall back to the current defaults.
+    const coordinator = {
+      coordinatorName: parsed.coordinatorName?.trim() || base.coordinatorName,
+      coordinatorPhone: parsed.coordinatorPhone?.trim() || base.coordinatorPhone,
+      coordinatorEmail: parsed.coordinatorEmail?.trim() || base.coordinatorEmail,
+    };
     const merged: InvitationInput = {
       ...base,
       ...parsed,
+      ...coordinator,
       schedule: Array.isArray(parsed.schedule) && parsed.schedule.length > 0 ? parsed.schedule : base.schedule,
     };
     // Shape check only (values may be incomplete — that's what a draft is).

@@ -11,10 +11,10 @@ export const SAMPLE_INVITATION: InvitationInput = {
   academicYear: 2569,
   studentYear: 2,
   venue: "ห้อง DT01 ชั้น 8 อาคารเฉลิมพระเกียรติ 55 พรรษา สมเด็จพระเทพรัตนราชสุดาฯ สยามบรมราชกุมารี",
-  coordinatorTitle: "นางสาว",
-  coordinatorName: "พิมพ์พิสุทธิ์ สุธรรมราษฎร์",
-  coordinatorPhone: "089-6191-329",
-  coordinatorEmail: "pimpisut.su@kmitl.ac.th",
+  coordinatorTitle: "นาย",
+  coordinatorName: "จิรเดช พิชัย",
+  coordinatorPhone: "096-8590-110",
+  coordinatorEmail: "jiradech.pi@kmitl.ac.th",
   schedule: [
     {
       id: "s1",

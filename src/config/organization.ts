@@ -8,7 +8,7 @@ export const ORGANIZATION = {
   /** Government document prefix: "อว 7033" → "อว ๗๐๓๓". */
   documentPrefix: "อว 7033",
   /** Address block on the right of the letterhead, one entry per printed line. */
-  letterheadLines: ["สถาบันเทคโนโลยีพระจอมเกล้า", "เจ้าคุณทหารลาดกระบัง", "เลขที่ 1 ซอยฉลองกรุง 1", "เขตลาดกระบัง กรุงเทพฯ 10520"],
+  letterheadLines: ["สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง", "เลขที่ 1 ซอยฉลองกรุง 1 เขตลาดกระบัง กรุงเทพฯ 10520"],
   signer: {
     name: "รองศาสตราจารย์ ดร.ทันตแพทย์หญิงอารยา พงษ์หาญยุทธ",
     position: "คณบดีคณะทันตแพทยศาสตร์",
