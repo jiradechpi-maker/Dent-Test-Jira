@@ -34,7 +34,9 @@ describe("suggestRooms", () => {
   it("skips options with a room already taken at that time, keeping pairs together", () => {
     const busy = exam({ id: "busy", rooms: ["Lecture 1"], start: "10:00", end: "12:00" });
     const options = suggestRooms(exam({ id: "c", year: 4, rooms: [] }), [busy]).map((rule) => rule.id);
-    expect(options).not.toContain("lecture13");
+    expect(options).not.toContain("lecture1-lecture3");
+    expect(options).not.toContain("lecture1-lab");
+    expect(options).toContain("lecture3-lab");
     expect(options[0]).toBe("conf401");
   });
 });
@@ -77,6 +79,11 @@ describe("withSuggestions", () => {
     const issues = withSuggestions(findIncompleteExams(entries, "2026-10-01"), entries, []);
     expect(issues[0]).toMatchObject({ kind: "resigned-invigilator" });
     expect(issues[0]?.suggestion).toMatch(/น้อยสุด: \w+$/);
+  });
+
+  it("pairs any two of DT01/DT03/DT05 for years 1–2 when one is taken", () => {
+    const busy = exam({ id: "busy", rooms: ["DT01"] });
+    expect(suggestRooms(exam({ id: "y1", year: 1 }), [busy])[0]?.rooms).toEqual(["DT03", "DT05"]);
   });
 
   it("tells which exam to move on a room clash", () => {

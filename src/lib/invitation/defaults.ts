@@ -107,13 +107,13 @@ export function keepCoordinator(from: InvitationInput, into: InvitationInput): I
 const BUILDING_55 = "อาคารเฉลิมพระเกียรติ 55 พรรษา สมเด็จพระเทพรัตนราชสุดาฯ สยามบรมราชกุมารี";
 const CLINIC_BUILDING = "อาคารคลินิกทันตกรรม";
 
-/** Quick-fill venues. Building 55 has DT01 and DT03 (floor 8); clinic-building floors are not printed. */
+/** Quick-fill venues. DT01/DT03 are on floor 8 of building 55 (DT05's floor not confirmed); clinic-building floors are not printed. */
 export const VENUE_PRESETS: { label: string; value: string }[] = [
   { label: "DT01 · ตึก 55", value: `ห้อง DT01 ชั้น 8 ${BUILDING_55}` },
   { label: "DT03 · ตึก 55", value: `ห้อง DT03 ชั้น 8 ${BUILDING_55}` },
+  { label: "DT05 · ตึก 55", value: `ห้อง DT05 ${BUILDING_55}` },
   { label: "Conference room 1 (401)", value: `ห้อง Conference room 1 (401) ${CLINIC_BUILDING}` },
   { label: "Lecture 1", value: `ห้อง Lecture 1 ${CLINIC_BUILDING}` },
   { label: "Lecture 3", value: `ห้อง Lecture 3 ${CLINIC_BUILDING}` },
-  { label: "Common Lab 1", value: `ห้อง Common Lab 1 ${CLINIC_BUILDING}` },
-  { label: "Common Lab 2", value: `ห้อง Common Lab 2 ${CLINIC_BUILDING}` },
+  { label: "Common Lab", value: `ห้อง Common Lab ${CLINIC_BUILDING}` },
 ];

@@ -17,7 +17,7 @@ export function concurrentExams(entry: ExamEntry, entries: ExamEntry[]): Timed[]
 
 /**
  * Free room options for an exam, best first: the cohort's own building first (401 for years 3+,
- * DT01+DT03 for years 1–2), then the other building. Pairs always come as two rooms on one floor.
+ * a DT01/DT03/DT05 pair for years 1–2), then the other building. Pairs split the cohort half and half.
  */
 export function suggestRooms(entry: ExamEntry, entries: ExamEntry[]): RoomRule[] {
   if (!isTimed(entry)) return [];

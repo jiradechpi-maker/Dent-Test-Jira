@@ -53,8 +53,6 @@ export function buildingForYear(year: number | null): Building {
 export interface RoomRule {
   id: string;
   building: Building;
-  /** Floor both rooms are on; null = not confirmed yet. */
-  floor: number | null;
   rooms: string[];
   split: boolean;
   invigilators: number;
@@ -62,45 +60,65 @@ export interface RoomRule {
 }
 
 /**
- * Room options in order of preference. Room 401 holds a whole cohort; every other option is two rooms on
- * the same floor used together, so the cohort does not walk between floors. Names match the invigilation sheet.
+ * Room options in order of preference. Room 401 holds a whole cohort (≤ 30 students). Every other option is
+ * two rooms in one building used together, half the cohort in each. Names match the invigilation sheet.
  */
 export const ROOM_RULES: RoomRule[] = [
   {
     id: "conf401",
     building: "CLINIC",
-    floor: 4,
     rooms: ["Conference room 1 (401)"],
     split: false,
     invigilators: 2,
-    note: "รับได้ทั้งชั้นปี ไม่ต้องแบ่งห้อง",
+    note: "ตึกคลินิก · รับได้ทั้งชั้นปี (ไม่เกิน 30 คน) ไม่ต้องแบ่งห้อง",
   },
   {
-    id: "b55",
+    id: "dt01-dt03",
     building: "B55",
-    floor: 8,
     rooms: ["DT01", "DT03"],
     split: true,
     invigilators: 4,
-    note: "ชั้น 8 · ใช้คู่กันเสมอ ห้องละ 2 คน",
+    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
-    id: "lecture13",
+    id: "dt01-dt05",
+    building: "B55",
+    rooms: ["DT01", "DT05"],
+    split: true,
+    invigilators: 4,
+    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "dt03-dt05",
+    building: "B55",
+    rooms: ["DT03", "DT05"],
+    split: true,
+    invigilators: 4,
+    note: "ตึก 55 · ปี 1–2 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "lecture1-lecture3",
     building: "CLINIC",
-    floor: null,
     rooms: ["Lecture 1", "Lecture 3"],
     split: true,
     invigilators: 4,
-    note: "ชั้นเดียวกัน · ใช้คู่กัน ห้องละ 2 คน",
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
   {
-    id: "classroom-lab",
+    id: "lecture1-lab",
     building: "CLINIC",
-    floor: null,
-    rooms: ["Classroom 1", "Common Lab"],
+    rooms: ["Lecture 1", "Common Lab"],
     split: true,
     invigilators: 4,
-    note: "ชั้นเดียวกัน · ใช้คู่กัน ห้องละ 2 คน",
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
+  },
+  {
+    id: "lecture3-lab",
+    building: "CLINIC",
+    rooms: ["Lecture 3", "Common Lab"],
+    split: true,
+    invigilators: 4,
+    note: "ตึกคลินิก · ปี 3–5 · แบ่งนักศึกษาครึ่งห้อง ห้องละ 2 คน",
   },
 ];
 
