@@ -18,8 +18,11 @@ import {
   BorderStyle,
   Document,
   Footer,
+  HorizontalPositionRelativeFrom,
   ImageRun,
   LineRuleType,
+  TextWrappingType,
+  VerticalPositionRelativeFrom,
   Packer,
   Paragraph,
   Tab,
@@ -49,19 +52,23 @@ const cm = (value: number): number => Math.round((value * 1440) / 2.54);
 const PAGE = { width: 11906, height: 16838 };
 const MARGIN = { top: cm(1.5), bottom: cm(1.8), left: cm(3.0), right: cm(2.0) };
 const CONTENT_WIDTH = PAGE.width - MARGIN.left - MARGIN.right; // 16 cm
-const ADDRESS_COLUMN = cm(6.5); // where the right-hand letterhead block starts
-/**
- * The address block may run 1 cm into the right margin (the original letter used a −2.08 cm right indent)
- * so each address line — institution name, then street address — stays on ONE line.
+/*
+ * Positions below were measured on the MS Word ruler of the faculty's original letter
+ * (distances from the left margin):
+ *   address block 8.73 cm · month of the date 8.40 cm · "เรื่อง/เรียน" text 1.27 cm · first-line indent 2.54 cm
  */
-const LETTERHEAD_WIDTH = CONTENT_WIDTH + cm(1.0);
-const DATE_INDENT = cm(8.0);
+const ADDRESS_COLUMN = cm(8.73);
+/** The original used a −2.08 cm right indent so each address line fits on ONE line. */
+const LETTERHEAD_WIDTH = CONTENT_WIDTH + 1180;
+const DATE_INDENT = cm(8.4);
+/** Space between blocks (เรื่อง, เรียน, each paragraph…) in the original: 12 pt. */
+const BLOCK_GAP = 240;
 const BODY_FIRST_LINE = 1440; // 2.54 cm, as in the original letter
 /**
- * Exact line pitch (twips). Locking it makes MS Word and LibreOffice/Gotenberg break pages identically,
- * whichever TH Sarabun build is installed (TH SarabunPSK and TH Sarabun New report different line heights).
+ * Exact line pitch (twips) equal to Word's single spacing for this font, locked so MS Word and
+ * LibreOffice/Gotenberg always break lines and pages identically.
  */
-const LINE_PITCH = 380; // 19 pt
+const LINE_PITCH = 416; // 20.8 pt = TH Sarabun New 16 pt "single" line in MS Word
 
 type RunOpts = Omit<IRunOptions, "font">;
 
@@ -103,17 +110,27 @@ const NO_BORDERS = TableBorders.NONE;
 
 // ── Page 1 — the letter ────────────────────────────────────────────────────
 
-const emblem = para(
-  [
-    new ImageRun({
-      type: "jpg",
-      data: EMBLEM,
-      transformation: { width: 113, height: 113 }, // 3.0 cm at 96 dpi
-      altText: { name: "KMITL emblem", title: "ตราสัญลักษณ์ สจล.", description: "ตราสัญลักษณ์สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง" },
-    }),
-  ],
-  { alignment: AlignmentType.CENTER, spacing: { line: 240, lineRule: LineRuleType.AUTO, after: 120 } },
-);
+// Emblem floats exactly where the original places it (behind text, no wrapping), so the
+// "ที่ …" line sits beside the lower half of the emblem instead of below it.
+const EMU_PER_CM = 360000;
+const emblem = para([
+  new ImageRun({
+    type: "jpg",
+    data: EMBLEM,
+    transformation: { width: 126, height: 126 }, // 3.33 cm — same size as the original
+    floating: {
+      horizontalPosition: { relative: HorizontalPositionRelativeFrom.COLUMN, offset: 2063750 },
+      verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, offset: Math.round(1.55 * EMU_PER_CM) },
+      wrap: { type: TextWrappingType.NONE },
+      behindDocument: true,
+      allowOverlap: true,
+      lockAnchor: true,
+    },
+    altText: { name: "KMITL emblem", title: "ตราสัญลักษณ์ สจล.", description: "ตราสัญลักษณ์สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง" },
+  }),
+]);
+// Two empty lines (as in the original) put the "ที่" line 2.31 cm below the top margin.
+const headerSpacer = para([run("")], { spacing: { before: BLOCK_GAP, after: BLOCK_GAP } });
 
 const zeroCellMargins = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -144,7 +161,7 @@ const letterhead = new Table({
 
 const issueDate = para([run("{issueDate}")], {
   indent: { left: DATE_INDENT },
-  spacing: { before: 120, after: 120 },
+  spacing: { before: BLOCK_GAP },
 });
 
 const hanging = { left: 720, hanging: 720 };
@@ -152,19 +169,19 @@ const hanging = { left: 720, hanging: 720 };
 const subject = para([run("เรื่อง"), run("", { children: [new Tab()] }), run("ขอเรียนเชิญเป็นอาจารย์พิเศษ รายวิชา {courseName}")], {
   indent: hanging,
   alignment: AlignmentType.THAI_DISTRIBUTE,
-  spacing: { before: 120, after: 0 },
+  spacing: { before: BLOCK_GAP },
 });
 
 const salutation = para([run("เรียน"), run("", { children: [new Tab()] }), run("{lecturerName}")], {
   indent: hanging,
   alignment: AlignmentType.THAI_DISTRIBUTE,
-  spacing: { before: 120, after: 120 },
+  spacing: { before: BLOCK_GAP },
 });
 
 const bodyOptions: Omit<IParagraphOptions, "children"> = {
   indent: { firstLine: BODY_FIRST_LINE },
   alignment: AlignmentType.THAI_DISTRIBUTE,
-  spacing: { before: 0, after: 120 },
+  spacing: { before: BLOCK_GAP },
 };
 
 const body1 = para(
@@ -207,9 +224,10 @@ const signatureKeep: Omit<IParagraphOptions, "children"> = {
   keepLines: true,
 };
 
-const closing = para([run("ขอแสดงความนับถือ")], { ...signatureKeep, spacing: { before: 240, after: 0 } });
+// Original: two empty lines → "ขอแสดงความนับถือ" → two empty lines (signature) → name.
+const closing = para([run("ขอแสดงความนับถือ")], { ...signatureKeep, spacing: { before: 2 * LINE_PITCH } });
 const signatureSpace = [0, 1].map(() => para([run("")], signatureKeep));
-const signerName = para([run("{signerName}")], { ...signatureKeep, spacing: { before: 120, after: 0 } });
+const signerName = para([run("{signerName}")], signatureKeep);
 const signerPosition = para([run("{signerPosition}")], { alignment: AlignmentType.CENTER, keepLines: true });
 
 const firstPageFooter = new Footer({
@@ -330,6 +348,7 @@ const doc = new Document({
       },
       children: [
         emblem,
+        headerSpacer,
         letterhead,
         issueDate,
         subject,

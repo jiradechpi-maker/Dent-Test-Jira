@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import PizZip from "pizzip";
 import { describe, expect, it } from "vitest";
-import { renderDocx } from "@/server/render-docx";
+import { prepareDocxForLibreOffice, renderDocx } from "@/server/render-docx";
 import { SAMPLE_INVITATION } from "./sample";
 import { invitationSchema } from "./schema";
 import { buildInvitationTemplateData, invitationFileName } from "./template-data";
@@ -136,5 +136,17 @@ describe("rendered .docx", () => {
     expect(text).toContain("พฤหัสบดีที่ ๐๑/๑๐/๖๙");
     expect(text).toContain("Extra & <special> topic");
     expect(text).toContain("๑.๕");
+  });
+});
+
+describe("PDF preparation", () => {
+  it("keeps Thai-distributed alignment in the .docx and maps it to justify for LibreOffice", () => {
+    const template = readFileSync(join(process.cwd(), "templates", "invitation-letter.docx"));
+    const docx = renderDocx(template, buildInvitationTemplateData(invitationSchema.parse(SAMPLE_INVITATION)));
+    const xml = (b: Buffer) => new PizZip(b).file("word/document.xml")?.asText() ?? "";
+    expect(xml(docx)).toContain('w:val="thaiDistribute"');
+    const forPdf = xml(prepareDocxForLibreOffice(docx));
+    expect(forPdf).not.toContain("thaiDistribute");
+    expect(forPdf).toContain('w:jc w:val="both"');
   });
 });

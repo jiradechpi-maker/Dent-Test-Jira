@@ -1,3 +1,3 @@
-TH Sarabun New — Thai national government font (DIP / SIPA), free to use and redistribute.
-Files from the `font-th-sarabun-new` npm package. Replace them with the official
-THSarabunNew*.ttf files if you have them; keep the same file names.
+TH Sarabun New — Thai national government font by SIPA/DIP (free to use and redistribute).
+These are the original TTF files (same as installed with MS Office on Windows), so
+LibreOffice/Gotenberg measures text exactly like MS Word.

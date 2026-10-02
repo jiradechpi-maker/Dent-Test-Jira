@@ -46,9 +46,6 @@ const SHORT_TITLE: Record<CoordinatorTitle, string> = {
   นางสาว: "น.ส.",
 };
 
-/** Number of blank characters left for the day when the registry office fills it in by hand. */
-const BLANK_DAY = "      ";
-
 export function totalScheduleHours(schedule: InvitationInput["schedule"]): number {
   return Math.round(schedule.reduce((sum, item) => sum + item.hours, 0) * 100) / 100;
 }
@@ -63,9 +60,8 @@ export function buildInvitationTemplateData(input: InvitationInput): InvitationT
   const totalHours = totalScheduleHours(sorted);
   const totalPoints = Math.round(totalHours * input.pointsPerHour * 100) / 100;
 
-  const issueDate = input.includeIssueDay
-    ? formatLetterDate(input.issueDate, { includeDay: true, thaiDigits: th })
-    : BLANK_DAY + formatLetterDate(input.issueDate, { includeDay: false, thaiDigits: th });
+  // Without a day, the space left of the month (as in the original) is where the registry writes it by hand.
+  const issueDate = formatLetterDate(input.issueDate, { includeDay: input.includeIssueDay, thaiDigits: th });
 
   return {
     documentPrefix: d(ORGANIZATION.documentPrefix),

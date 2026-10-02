@@ -54,3 +54,17 @@ export function renderDocx(template: Buffer, data: object): Buffer {
     throw new TemplateRenderError("ไม่สามารถสร้างเอกสารจากแม่แบบได้", explain(error));
   }
 }
+
+/**
+ * LibreOffice (used by Gotenberg) does not implement Word's "Thai distributed" alignment and
+ * falls back to ragged-right. For PDF conversion only, map it to regular justification, which
+ * LibreOffice applies at Thai word boundaries — both edges stay flush like an official letter.
+ * The .docx handed to users keeps "thaiDistribute", exactly like the faculty's original.
+ */
+export function prepareDocxForLibreOffice(docx: Buffer): Buffer {
+  const zip = new PizZip(docx);
+  const file = zip.file("word/document.xml");
+  if (!file) return docx;
+  zip.file("word/document.xml", file.asText().replace(/w:val="thaiDistribute"/g, 'w:val="both"'));
+  return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
+}

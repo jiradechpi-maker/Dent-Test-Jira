@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { buildInvitationTemplateData, invitationFileName } from "@/lib/invitation/template-data";
 import { invitationRequestSchema } from "@/lib/invitation/schema";
 import { convertDocxToPdf, PdfConversionError } from "@/server/gotenberg";
-import { loadTemplate, renderDocx, TemplateRenderError } from "@/server/render-docx";
+import { loadTemplate, prepareDocxForLibreOffice, renderDocx, TemplateRenderError } from "@/server/render-docx";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +41,8 @@ export async function POST(request: Request) {
     const template = await loadTemplate(TEMPLATE_FILE);
     const docx = renderDocx(template, buildInvitationTemplateData(data));
     const fileName = invitationFileName(data, format);
-    const payload = format === "pdf" ? await convertDocxToPdf(docx, invitationFileName(data, "docx")) : docx;
+    const payload =
+      format === "pdf" ? await convertDocxToPdf(prepareDocxForLibreOffice(docx), invitationFileName(data, "docx")) : docx;
 
     return new NextResponse(new Uint8Array(payload), {
       status: 200,
