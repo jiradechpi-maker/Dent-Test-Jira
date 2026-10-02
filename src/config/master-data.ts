@@ -55,10 +55,10 @@ export const ROOM_RULES: RoomRule[] = [
   {
     id: "b55",
     building: "B55",
-    rooms: ["DT01", "DT03", "DT05"],
+    rooms: ["DT01", "DT03"],
     split: true,
     invigilators: 4,
-    note: "แบ่ง 2 ห้องเสมอ ห้องละ 2 คน",
+    note: "แบ่ง 2 ห้องเสมอ (DT01 + DT03) ห้องละ 2 คน",
   },
   {
     id: "conf401",
