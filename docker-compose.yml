@@ -1,0 +1,11 @@
+services:
+  gotenberg:
+    build: ./docker/gotenberg
+    image: dentops-gotenberg:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=50"
