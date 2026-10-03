@@ -3,7 +3,8 @@ import { Building2, Database, DoorOpen, Users } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BUILDINGS, DAY_COLORS, INVIGILATORS, ROOM_RULES } from "@/config/master-data";
+import Link from "next/link";
+import { BUILDINGS, DAY_COLORS, INVIGILATORS, ROOM_RULES, yearColor } from "@/config/master-data";
 import { COURSES_DATA } from "@/data/course-catalog";
 
 export const metadata: Metadata = { title: "ข้อมูลหลัก" };
@@ -92,13 +93,21 @@ export default function MasterDataPage() {
               <CardTitle>รายวิชาในหลักสูตร</CardTitle>
               <CardDescription>ทันตแพทยศาสตรบัณฑิต (หลักสูตรนานาชาติ) · {COURSES_DATA.length} รายการ</CardDescription>
             </div>
+            <Link href="/courses" className="text-xs font-medium text-brand-700 hover:underline">
+              ดูรายวิชาทั้งหมด →
+            </Link>
           </CardHeader>
           <CardContent className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {byYear.map(({ year, count }) => (
-              <div key={year} className="rounded-[var(--radius-control)] border border-border px-3 py-2 text-center">
-                <p className="text-[11px] text-muted-foreground">ชั้นปี {year}</p>
+              <Link
+                key={year}
+                href="/courses"
+                className="rounded-[var(--radius-control)] px-3 py-2 text-center transition-[filter] hover:brightness-95"
+                style={{ background: yearColor(year)?.bg, color: yearColor(year)?.fg }}
+              >
+                <p className="text-[11px] opacity-80">ชั้นปี {year}</p>
                 <p className="text-lg font-semibold tabular">{count}</p>
-              </div>
+              </Link>
             ))}
           </CardContent>
         </Card>

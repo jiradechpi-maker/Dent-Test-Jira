@@ -760,7 +760,7 @@ export const COURSES_DATA: CourseCatalogItem[] = [
     category: 'core'
   },
   {
-    code: '20606004',
+    code: '2060xxxx',
     name: 'Electives',
     credit: '1 (1-0-2)',
     instructor: 'อ.วิจิตรา',
@@ -1444,6 +1444,37 @@ export const COURSES_DATA: CourseCatalogItem[] = [
     category: 'clinic'
   }
 ];
+
+export type CatalogSemester = CourseCatalogItem["semester"];
+
+export const SEMESTER_TABS: { value: CatalogSemester; label: string; short: string }[] = [
+  { value: "1", label: "ภาคเรียนที่ 1", short: "ภาค 1" },
+  { value: "2", label: "ภาคเรียนที่ 2", short: "ภาค 2" },
+  { value: "year", label: "ตลอดปี / คลินิก", short: "ตลอดปี" },
+];
+
+export const CATEGORY_LABEL: Record<NonNullable<CourseCatalogItem["category"]>, string> = {
+  core: "วิชาบังคับ",
+  clinic: "คลินิก",
+  elective: "วิชาเลือก",
+  ge: "ศึกษาทั่วไป",
+};
+
+export const CATALOG_YEARS = [1, 2, 3, 4, 5, 6] as const;
+
+export function coursesFor(year: number, semester?: CatalogSemester): CourseCatalogItem[] {
+  return COURSES_DATA.filter((c) => c.year === year && (semester === undefined || c.semester === semester));
+}
+
+/** Code or any part of the name, across every year. */
+export function searchCourses(query: string): CourseCatalogItem[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return COURSES_DATA.filter((c) => {
+    const haystack = `${c.code} ${c.name}`.toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
+}
 
 /** Unique course names, sorted — for autocomplete. */
 export const COURSE_NAMES: string[] = Array.from(new Set(COURSES_DATA.map((c) => c.name))).sort((a, b) => a.localeCompare(b));

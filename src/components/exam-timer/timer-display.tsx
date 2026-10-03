@@ -1,16 +1,21 @@
 "use client";
 
 import { forwardRef } from "react";
+import { DoorClosed, DoorOpen, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatFullThaiDate, todayInBangkok } from "@/lib/thai";
 import {
+  extensionMs,
   formatClock,
   formatCountdown,
   formatDurationThai,
   phaseAt,
   progressAt,
   remainingMs,
+  roomNotices,
   urgencyAt,
   type ExamSession,
+  type RoomRules,
   type Urgency,
 } from "@/lib/exam-timer/timing";
 
@@ -48,12 +53,13 @@ export interface TimerDisplayProps {
   room: string;
   theme: DisplayTheme;
   fullscreen: boolean;
+  rules: RoomRules;
   children?: React.ReactNode;
 }
 
 /** The projector-facing screen. Sizes itself to its container with container-query units. */
 export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(function TimerDisplay(
-  { session, now, title, room, theme, fullscreen, children },
+  { session, now, title, room, theme, fullscreen, rules, children },
   ref,
 ) {
   const dark = theme === "dark";
@@ -62,6 +68,10 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
   const remaining = session ? remainingMs(session, now) : 0;
   const progress = session ? progressAt(session, now) : 0;
   const justEnded = session !== null && phase === "ended" && now - session.endAt < 12_000;
+  const extension = session ? extensionMs(session) : 0;
+  const plannedEnd = session ? session.endAt - extension : 0;
+  const notices = session ? roomNotices(session, now, rules) : [];
+  const dateText = now > 0 ? formatFullThaiDate(todayInBangkok(new Date(now)), false) : "";
 
   const label =
     phase === "waiting"
@@ -94,7 +104,9 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
           <p className={cn("truncate text-[3.4cqw] leading-tight font-semibold", dark ? "text-white" : "text-neutral-900")}>
             {title || "การสอบ"}
           </p>
-          {room ? <p className={cn("mt-[0.4cqw] truncate text-[2.2cqw]", dark ? "text-white/60" : "text-neutral-500")}>{room}</p> : null}
+          <p className={cn("mt-[0.4cqw] truncate text-[2.2cqw]", dark ? "text-white/60" : "text-neutral-500")}>
+            {[room, dateText].filter(Boolean).join(" · ")}
+          </p>
         </div>
         <div className="shrink-0 text-right">
           <p className={cn("text-[1.6cqw] tracking-wide uppercase", dark ? "text-white/50" : "text-neutral-400")}>เวลาปัจจุบัน · Now</p>
@@ -118,7 +130,7 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
           <p
             className={cn(
               "font-[family-name:var(--font-latin)] leading-none font-semibold tracking-[-0.03em] tabular transition-colors duration-500",
-              remaining >= 3_600_000 ? "text-[17cqw]" : "text-[22cqw]",
+              remaining >= 3_600_000 ? "text-[15cqw]" : "text-[19cqw]",
               session ? URGENCY_TEXT[theme][urgency] : dark ? "text-white/30" : "text-neutral-300",
               urgency === "critical" && "animate-pulse-soft",
             )}
@@ -128,15 +140,52 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
         )}
       </div>
 
-      {/* Footer: schedule + progress */}
+      {/* Exam-room rules, worded for right now */}
+      {notices.length ? (
+        <div className="flex flex-wrap items-center justify-center gap-[1.2cqw] px-[4cqw] pb-[1.6cqw]">
+          {notices.map((notice) => {
+            const Icon = notice.state === "open" ? DoorOpen : notice.state === "closed" ? DoorClosed : Info;
+            return (
+              <span
+                key={notice.key}
+                className={cn(
+                  "flex items-center gap-[0.8cqw] rounded-full px-[1.8cqw] py-[0.6cqw] text-[1.9cqw] font-medium",
+                  notice.state === "open" && (dark ? "bg-emerald-400/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"),
+                  notice.state === "closed" && (dark ? "bg-rose-400/15 text-rose-200" : "bg-rose-50 text-rose-700"),
+                  notice.state === "info" && (dark ? "bg-white/10 text-white/75" : "bg-neutral-100 text-neutral-600"),
+                )}
+              >
+                <Icon className="size-[2cqw]" aria-hidden />
+                {notice.text}
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Footer: the exam's official time window + its length */}
       <div className="px-[4cqw] pb-[3cqw]">
-        <div className={cn("flex items-center justify-between gap-[2cqw] text-[2.2cqw]", dark ? "text-white/70" : "text-neutral-600")}>
-          <span>
-            เริ่ม <b className="font-[family-name:var(--font-latin)] font-semibold tabular">{session ? formatClock(session.startAt) : "--:--"}</b>
-            <span className="mx-[1.2cqw] opacity-40">•</span>
-            เลิก <b className="font-[family-name:var(--font-latin)] font-semibold tabular">{session ? formatClock(session.endAt) : "--:--"}</b>
-          </span>
-          <span>{session ? `รวม ${formatDurationThai(session.endAt - session.startAt)}` : ""}</span>
+        <div className={cn("flex items-end justify-between gap-[2cqw]", dark ? "text-white/70" : "text-neutral-600")}>
+          <div className="min-w-0">
+            <p className={cn("text-[1.6cqw] tracking-wide", dark ? "text-white/50" : "text-neutral-400")}>เวลาสอบ · Exam time</p>
+            <p className="text-[3cqw] leading-tight">
+              <b className={cn("font-[family-name:var(--font-latin)] font-semibold tabular", dark ? "text-white" : "text-neutral-900")}>
+                {session ? `${formatClock(session.startAt)} – ${formatClock(plannedEnd)}` : "--:-- – --:--"}
+              </b>
+              <span className="ml-[0.8cqw] text-[2cqw]">น.</span>
+              {extension > 0 && session ? (
+                <span className={cn("ml-[1.4cqw] text-[2cqw] font-medium", dark ? "text-amber-300" : "text-amber-600")}>
+                  ขยาย +{formatDurationThai(extension)} → {formatClock(session.endAt)} น.
+                </span>
+              ) : null}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className={cn("text-[1.6cqw] tracking-wide", dark ? "text-white/50" : "text-neutral-400")}>ระยะเวลา · Duration</p>
+            <p className={cn("text-[3cqw] leading-tight font-semibold", dark ? "text-white" : "text-neutral-900")}>
+              {session ? `รวม ${formatDurationThai(plannedEnd - session.startAt)}` : "—"}
+            </p>
+          </div>
         </div>
         <div className={cn("mt-[1.2cqw] h-[0.9cqw] min-h-1 w-full overflow-hidden rounded-full", dark ? "bg-white/10" : "bg-neutral-100")}>
           <div

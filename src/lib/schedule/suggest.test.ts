@@ -52,8 +52,8 @@ describe("suggestInvigilators", () => {
 
   it("prefers building-55 staff for years 1–2 and the fewest hours otherwise", () => {
     const loads = [
-      { name: "Bank", recorded: 1, planned: 0, total: 1, pending: [] },
-      { name: "Time", recorded: 20, planned: 0, total: 20, pending: [] },
+      { name: "Bank", recorded: 1, planned: 0, unrecorded: 0, total: 1, pending: [], missing: [] },
+      { name: "Time", recorded: 20, planned: 0, unrecorded: 0, total: 20, pending: [], missing: [] },
     ];
     expect(["Aom", "Pao", "Time"]).toContain(suggestInvigilators(exam({ id: "y", year: 1 }), [], loads, 1)[0]);
     const clinic = suggestInvigilators(exam({ id: "z", year: 4 }), [], loads, 19);

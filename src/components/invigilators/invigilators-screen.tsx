@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CircleAlert, Users } from "lucide-react";
 import { INVIGILATORS, RESIGNED_INVIGILATORS } from "@/config/master-data";
 import { mediumDay, timeSpan } from "@/lib/schedule/format";
-import { invigilatorLoads } from "@/lib/schedule/load";
+import { invigilatorLoads, missingFromSummary } from "@/lib/schedule/load";
 import { todayInBangkok } from "@/lib/thai";
 import { cn } from "@/lib/utils";
 import { PageContainer, PageHeader } from "@/components/common/page-header";
@@ -21,11 +21,12 @@ export function InvigilatorsScreen() {
   const [today] = useState(() => todayInBangkok());
   const [selected, setSelected] = useState<string | null>(null);
   const book = invigilation?.ok ? invigilation.data : null;
-  const allLoads = useMemo(() => (book ? invigilatorLoads(book) : []), [book]);
+  const allLoads = useMemo(() => (book ? invigilatorLoads(book, today) : []), [book, today]);
+  const missing = useMemo(() => missingFromSummary(allLoads), [allLoads]);
   const loads = allLoads.filter((load) => !RESIGNED_INVIGILATORS.includes(load.name));
   const resigned = allLoads.filter((load) => RESIGNED_INVIGILATORS.includes(load.name));
   const max = Math.max(1, ...loads.map((load) => load.total));
-  const average = loads.length ? loads.reduce((sum, load) => sum + load.total, 0) / loads.length : 0;
+  const average = loads.length ? loads.reduce((sum, load) => sum + load.recorded, 0) / loads.length : 0;
   const person = loads.find((load) => load.name === selected) ?? null;
 
   return (
@@ -63,8 +64,8 @@ export function InvigilatorsScreen() {
               <div>
                 <CardTitle>ชั่วโมงสะสมรายบุคคล</CardTitle>
                 <CardDescription>
-                  สีเข้ม = นับแล้วในแท็บ “{book.summary?.sheet ?? "สรุป"}” · สีอ่อน = จัดไว้ในแท็บรายเดือนแต่ยังไม่ลงแท็บสรุป · เฉลี่ย{" "}
-                  {average.toFixed(1)} ชม.
+                  ตัวเลขหลัก = ชั่วโมงรวมในแท็บ “{book.summary?.sheet ?? "สรุป"}” (ตรงกับชีต) · <b className="text-brand-600">+</b> = สอบที่จัดไว้แล้วแต่ยังไม่ถึงวัน ·
+                  เรียงจากภาระรวมน้อยไปมาก · เฉลี่ย {average.toFixed(1)} ชม.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -76,7 +77,7 @@ export function InvigilatorsScreen() {
                       type="button"
                       onClick={() => setSelected((value) => (value === load.name ? null : load.name))}
                       className={cn(
-                        "grid w-full cursor-pointer grid-cols-[88px_1fr_64px] items-center gap-3 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-neutral-50",
+                        "grid w-full cursor-pointer grid-cols-[88px_1fr_112px] items-center gap-3 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-neutral-50",
                         selected === load.name && "bg-brand-50",
                       )}
                     >
@@ -86,10 +87,14 @@ export function InvigilatorsScreen() {
                       </span>
                       <span className="flex h-3 overflow-hidden rounded-full bg-neutral-100" aria-hidden>
                         <span className="bg-brand-600" style={{ width: `${(load.recorded / max) * 100}%` }} />
+                        <span className="bg-amber-400" style={{ width: `${(load.unrecorded / max) * 100}%` }} />
                         <span className="bg-brand-300" style={{ width: `${(load.planned / max) * 100}%` }} />
                       </span>
                       <span className="text-right tabular text-neutral-700">
-                        {load.total} <span className="text-[11px] text-muted-foreground">ชม.</span>
+                        <b className="font-semibold text-neutral-900">{load.recorded}</b>
+                        {load.planned ? <span className="ml-1 text-[11px] text-brand-600">+{load.planned}</span> : null}
+                        {load.unrecorded ? <span className="ml-1 text-[11px] text-amber-600">+{load.unrecorded}?</span> : null}
+                        <span className="ml-1 text-[11px] text-muted-foreground">ชม.</span>
                       </span>
                     </button>
                   </li>
@@ -97,7 +102,7 @@ export function InvigilatorsScreen() {
               </ul>
               {resigned.length ? (
                 <p className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
-                  ลาออกแล้ว (ไม่นับในการจัดงาน): {resigned.map((load) => `${load.name} ${load.total} ชม.`).join(" · ")}
+                  ลาออกแล้ว (ไม่นับในการจัดงาน): {resigned.map((load) => `${load.name} ${load.recorded} ชม.`).join(" · ")}
                 </p>
               ) : null}
             </CardContent>
@@ -109,15 +114,17 @@ export function InvigilatorsScreen() {
                 <div>
                   <CardTitle>{person ? `งานที่จัดให้ ${person.name}` : "เลือกชื่อเพื่อดูงานที่จัดไว้"}</CardTitle>
                   <CardDescription>
-                    {person ? `นับแล้ว ${person.recorded} ชม. · ยังไม่ลงแท็บสรุป ${person.planned} ชม.` : "งานที่ยังไม่ได้นับในแท็บสรุป"}
+                    {person
+                      ? `ในชีต ${person.recorded} ชม. · จัดไว้ล่วงหน้า ${person.planned} ชม.${person.unrecorded ? ` · สอบไปแล้วแต่ยังไม่ลงแท็บสรุป ${person.unrecorded} ชม.` : ""}`
+                      : "งานที่ยังไม่ได้นับในแท็บสรุป"}
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 {person ? (
-                  person.pending.length ? (
+                  person.pending.length + person.missing.length ? (
                     <ul className="divide-y divide-border rounded-[var(--radius-control)] border border-border text-[13px]">
-                      {person.pending.map((entry) => (
+                      {[...person.missing, ...person.pending].map((entry) => (
                         <li key={entry.id} className={cn("px-3 py-2", entry.date && entry.date < today && "text-neutral-400")}>
                           <p className="font-medium">{entry.title}</p>
                           <p className="text-xs text-muted-foreground tabular">
@@ -132,6 +139,34 @@ export function InvigilatorsScreen() {
                 ) : null}
               </CardContent>
             </Card>
+
+            {missing.length ? (
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <CircleAlert className="size-4 text-warning" aria-hidden /> สอบไปแล้วแต่ยังไม่อยู่ในแท็บสรุป
+                    </CardTitle>
+                    <CardDescription>
+                      มีในแท็บรายเดือนแต่ไม่มีคอลัมน์ในแท็บ “{book.summary?.sheet ?? "สรุป"}” — ชั่วโมงนี้ยังไม่ถูกนับในชีต (แสดงเป็นสีเหลือง +?)
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="flex flex-col gap-1.5 text-[13px] text-neutral-700">
+                    {missing.map(({ entry, people }) => (
+                      <li key={entry.id} className="flex gap-2">
+                        <Badge tone="warning">ตรวจ</Badge>
+                        <span>
+                          {entry.date ? mediumDay(entry.date) : ""} {timeSpan(entry.start, entry.end)} · {entry.title} — {people.join(", ")}{" "}
+                          <span className="text-muted-foreground">({entry.sheet} แถว {entry.row})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {book.summary?.warnings.length ? (
               <Card>

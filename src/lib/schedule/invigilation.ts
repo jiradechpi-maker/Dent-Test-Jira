@@ -42,6 +42,7 @@ export interface SummaryColumn {
 
 export interface SummaryPerson {
   name: string;
+  /** The sheet's own "ชั่วโมงรวมทั้งหมด" for this row when present, otherwise the sum of the marked columns. */
   hours: number;
   /** Indexes into `columns`. */
   assignments: number[];
@@ -263,9 +264,13 @@ function parseSummaryTab(grid: Grid): HoursSummary | null {
   const dateRow = headerRow + 1;
   const columns: SummaryColumn[] = [];
   const columnIndex = new Map<number, number>();
+  let totalCol = 0;
   for (let col = 3; col <= grid.columnCount; col++) {
     const dateText = textAt(grid, dateRow, col);
-    if (/ชั่วโมงรวม/.test(dateText)) break;
+    if (/ชั่วโมงรวม/.test(dateText)) {
+      totalCol = col;
+      break;
+    }
     const date = dateOf(getCell(grid, dateRow, col)?.value ?? null);
     const title = cleanText(textAt(grid, dateRow + 2, col));
     if (!date && !title) continue;
@@ -298,8 +303,13 @@ function parseSummaryTab(grid: Grid): HoursSummary | null {
       }
     }
     assignments.sort((a, b) => a - b);
-    const hours = assignments.reduce((sum, index) => sum + (columns[index]?.hours ?? 0), 0);
-    people.push({ name: person, hours: Math.round(hours * 100) / 100, assignments });
+    const summed = Math.round(assignments.reduce((sum, index) => sum + (columns[index]?.hours ?? 0), 0) * 100) / 100;
+    const sheetTotal = totalCol ? numberOf(getCell(grid, row, totalCol)?.value ?? null) : null;
+    const hours = sheetTotal === null ? summed : Math.round(sheetTotal * 100) / 100;
+    if (sheetTotal !== null && Math.abs(hours - summed) > 0.01) {
+      warnings.push(`ชั่วโมงรวมของ ${person} ในชีต (${hours}) ไม่เท่ากับผลรวมช่องที่ลงชื่อ (${summed}) — ตรวจช่วงสูตรในคอลัมน์ ${cellRef(row, totalCol)}`);
+    }
+    people.push({ name: person, hours, assignments });
   }
 
   return { sheet: grid.name, columns, people, warnings };

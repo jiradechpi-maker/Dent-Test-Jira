@@ -25,7 +25,8 @@ import { Input, NativeSelect, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { COURSE_NAMES, COURSES_DATA, findCourseByName } from "@/data/course-catalog";
+import { COURSES_DATA, findCourseByName, type CatalogSemester, type CourseCatalogItem } from "@/data/course-catalog";
+import { CoursePicker } from "@/components/courses/course-picker";
 import { DocumentApiError, requestInvitation, saveBlob } from "@/lib/invitation/client";
 import {
   VENUE_PRESETS,
@@ -236,6 +237,17 @@ export function InvitationBuilder() {
     toast.info(`เติมชั้นปีที่ ${course.year}${course.semester !== "year" ? ` ภาคเรียนที่ ${course.semester}` : ""} ให้อัตโนมัติ`);
   };
 
+  const [pickerSemester, setPickerSemester] = useState<CatalogSemester | null>(null);
+  const formSemester = values.semester === "1" || values.semester === "2" ? values.semester : "1";
+  const activePickerSemester = pickerSemester ?? formSemester;
+
+  const pickCourse = (course: CourseCatalogItem) => {
+    setValue("courseName", course.name, { shouldValidate: true, shouldDirty: true });
+    setValue("studentYear", course.year, { shouldDirty: true });
+    if (course.semester !== "year") setValue("semester", course.semester, { shouldDirty: true });
+    setPickerSemester(course.semester);
+  };
+
   const recomputeHours = (index: number) => {
     const row = getValues(`schedule.${index}`);
     const hours = hoursBetween(row.startTime, row.endTime);
@@ -368,7 +380,7 @@ export function InvitationBuilder() {
           <CardHeader>
             <div>
               <CardTitle>2 · อาจารย์พิเศษและรายวิชา</CardTitle>
-              <CardDescription>เลือกรายวิชาจากรายการ ระบบเติมชั้นปีและภาคเรียนให้</CardDescription>
+              <CardDescription>เลือกชั้นปีก่อน แล้วระบบแสดงเฉพาะวิชาของชั้นปีและภาคเรียนนั้น</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-6">
@@ -392,28 +404,46 @@ export function InvitationBuilder() {
                 ))}
               </datalist>
             </Field>
-            <Field label="ชื่อรายวิชา (ภาษาอังกฤษ)" htmlFor="courseName" required error={errors.courseName?.message} className="sm:col-span-6">
+            <div className="flex flex-col gap-1.5 sm:col-span-6">
+              <Label>เลือกชั้นปี → ภาคเรียน → รายวิชา</Label>
+              <CoursePicker
+                year={Number.isFinite(values.studentYear) ? values.studentYear : 1}
+                onYearChange={(year) => {
+                  setValue("studentYear", year, { shouldDirty: true });
+                  setPickerSemester(null);
+                }}
+                semester={activePickerSemester}
+                onSemesterChange={(semester) => {
+                  setPickerSemester(semester);
+                  if (semester !== "year") setValue("semester", semester, { shouldDirty: true });
+                }}
+                selectedName={values.courseName ?? ""}
+                onPick={pickCourse}
+              />
+            </div>
+            <Field
+              label="ชื่อรายวิชา (ภาษาอังกฤษ)"
+              htmlFor="courseName"
+              required
+              error={errors.courseName?.message}
+              hint="เติมให้เมื่อเลือกจากรายการ — วิชาที่ไม่มีในรายการพิมพ์เองได้"
+              className="sm:col-span-6"
+            >
               <Input
                 id="courseName"
-                list="course-catalog"
-                placeholder="พิมพ์เพื่อค้นหา เช่น Fixed Prosthodontics"
+                placeholder="เช่น Fixed Prosthodontics"
                 aria-invalid={!!errors.courseName}
                 {...register("courseName", { onChange: (e: React.ChangeEvent<HTMLInputElement>) => onCourseChange(e.target.value) })}
               />
-              <datalist id="course-catalog">
-                {COURSE_NAMES.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
             </Field>
-            <Field label="ภาคการศึกษา" htmlFor="semester" required className="sm:col-span-2">
+            <Field label="ภาคการศึกษา" htmlFor="semester" required className="sm:col-span-3">
               <NativeSelect id="semester" {...register("semester")}>
                 <option value="1">ภาคการศึกษาที่ 1</option>
                 <option value="2">ภาคการศึกษาที่ 2</option>
                 <option value="3">ภาคการศึกษาที่ 3 (ฤดูร้อน)</option>
               </NativeSelect>
             </Field>
-            <Field label="ปีการศึกษา (พ.ศ.)" htmlFor="academicYear" required error={errors.academicYear?.message} className="sm:col-span-2">
+            <Field label="ปีการศึกษา (พ.ศ.)" htmlFor="academicYear" required error={errors.academicYear?.message} className="sm:col-span-3">
               <Input
                 id="academicYear"
                 type="number"
@@ -423,15 +453,6 @@ export function InvitationBuilder() {
                 aria-invalid={!!errors.academicYear}
                 {...register("academicYear", { valueAsNumber: true })}
               />
-            </Field>
-            <Field label="ชั้นปีของนักศึกษา" htmlFor="studentYear" required className="sm:col-span-2">
-              <NativeSelect id="studentYear" {...register("studentYear", { valueAsNumber: true })}>
-                {[1, 2, 3, 4, 5, 6].map((y) => (
-                  <option key={y} value={y}>
-                    ชั้นปีที่ {y}
-                  </option>
-                ))}
-              </NativeSelect>
             </Field>
             <Field
               label="สถานที่เรียน"

@@ -6,6 +6,7 @@ import { MY_YEAR } from "@/config/data-sources";
 import { crossCheckYear, findExamClashes, findIncompleteExams, sortIssues, type IssueSeverity } from "@/lib/schedule/checks";
 import { examSnapshot } from "@/lib/schedule/diff";
 import { invigilatorLoads } from "@/lib/schedule/load";
+import { YearBadge } from "@/components/courses/course-picker";
 import { withSuggestions } from "@/lib/schedule/suggest";
 import { mediumDay, shortDay, timeSpan } from "@/lib/schedule/format";
 import type { ExamEntry } from "@/lib/schedule/invigilation";
@@ -47,7 +48,7 @@ export function ExamsScreen() {
       ...findIncompleteExams(book.entries, today),
       ...(teaching?.ok ? crossCheckYear(book, teaching.data, MY_YEAR).filter((issue) => !issue.date || issue.date >= today) : []),
     ];
-    return withSuggestions(sortIssues(all), book.entries, invigilatorLoads(book));
+    return withSuggestions(sortIssues(all), book.entries, invigilatorLoads(book, today));
   }, [book, teaching, today]);
   const shownIssues = severity === "all" ? issues : issues.filter((issue) => issue.severity === severity);
 
@@ -196,7 +197,7 @@ function ExamTable({ rows, today, issueIds }: { rows: ExamEntry[]; today: string
                     {flagged ? <Badge tone={flagged === "danger" ? "danger" : flagged === "warning" ? "warning" : "info"}>ต้องตรวจ</Badge> : null}
                   </span>
                 </td>
-                <td className="px-3 py-2">{entry.year ? <Badge tone={entry.year === MY_YEAR ? "brand" : "neutral"}>ปี {entry.year}</Badge> : "—"}</td>
+                <td className="px-3 py-2">{entry.year ? <YearBadge year={entry.year} /> : "—"}</td>
                 <td className="px-3 py-2">{entry.rooms.length ? entry.rooms.join(" · ") : <span className="text-warning">ยังไม่มีห้อง</span>}</td>
                 <td className="px-3 py-2">
                   {entry.invigilators.length ? (

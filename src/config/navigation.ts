@@ -1,5 +1,6 @@
 import {
   Archive,
+  BookOpen,
   CalendarDays,
   CalendarSearch,
   ClipboardList,
@@ -62,6 +63,15 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "ซิงก์จาก Google Drive อัตโนมัติ · ดูรายสัปดาห์ ค้นหาอาจารย์ และแจ้งเมื่อตารางเปลี่ยน",
         status: "ready",
         keywords: ["schedule", "timetable", "ตารางเรียน", "ตารางสอน", "ปี 4", "google sheets"],
+      },
+      {
+        id: "courses",
+        label: "รายวิชาในหลักสูตร",
+        href: "/courses",
+        icon: BookOpen,
+        description: "รายวิชาแยกตามชั้นปีและภาคเรียน พร้อมสีประจำชั้นปีและสีประจำวัน",
+        status: "ready",
+        keywords: ["course", "curriculum", "subject", "รายวิชา", "หลักสูตร", "รหัสวิชา", "สีชั้นปี"],
       },
       {
         id: "exams",
