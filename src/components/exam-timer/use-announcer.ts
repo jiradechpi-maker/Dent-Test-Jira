@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { announcementText, captionFor, speakableThai } from "@/lib/exam-timer/announcements";
+import { announcementText, captionFor, speakableThai, thaiPhrases } from "@/lib/exam-timer/announcements";
 import { CHIME_STYLES, playChime, unlockAudio, type ChimeStyle } from "@/lib/exam-timer/sounds";
 import { loadVoices, onVoicesChanged, speakThai, speechSupported, stopSpeaking, thaiVoices, type SpeakResult } from "@/lib/exam-timer/speech";
 import type { Bi } from "@/lib/i18n/locale";
@@ -17,13 +17,14 @@ export interface AnnounceSettings {
   chime: ChimeStyle;
 }
 
-export const RATE_OPTIONS = [0.8, 0.95, 1.1] as const;
+/** Slightly slower than the voice default — clearer in a large, echoing exam room. */
+export const RATE_OPTIONS = [0.8, 0.9, 1.0] as const;
 
 export const DEFAULT_ANNOUNCE: AnnounceSettings = {
   fiveMinutes: true,
   text: "",
   voiceUri: "",
-  rate: 0.95,
+  rate: 0.9,
   chime: "dingdong",
 };
 
@@ -122,7 +123,7 @@ export function useAnnouncer() {
       const seconds = playChime(settings.chime);
       if (seconds > 0) await sleep(seconds * 1000 + 250);
       if (mine !== sequence.current) return null;
-      const outcome = await speakThai(speakableThai(announcementText(settings.text)), {
+      const outcome = await speakThai(thaiPhrases(speakableThai(announcementText(settings.text))), {
         voiceUri: settings.voiceUri,
         rate: settings.rate,
         volume: Math.max(0.2, volume),

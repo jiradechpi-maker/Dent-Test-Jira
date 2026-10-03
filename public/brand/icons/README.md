@@ -1,4 +1,4 @@
-# DentOps app icons
+# Dentboard app icons
 
 Three icon concepts. Each folder has the full set:
 

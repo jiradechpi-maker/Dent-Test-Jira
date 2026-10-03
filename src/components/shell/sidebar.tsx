@@ -56,7 +56,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
         </span>
         {!collapsed && (
           <div className="min-w-0 leading-tight">
-            <p className="font-[family-name:var(--font-latin)] text-[13px] font-semibold tracking-tight text-white">DentOps</p>
+            <p className="font-[family-name:var(--font-latin)] text-[13px] font-semibold tracking-tight text-white">Dentboard</p>
             <p className="truncate text-[10.5px] text-white/60">{t("คณะทันตแพทยศาสตร์ สจล.", "Faculty of Dentistry, KMITL")}</p>
           </div>
         )}

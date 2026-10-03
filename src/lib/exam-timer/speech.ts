@@ -73,7 +73,7 @@ export function voiceLabel(voice: SpeechSynthesisVoice, locale: "th" | "en"): st
   const name = known?.name ?? voice.name.replace(/^Microsoft\s+/i, "").replace(/\s*-\s*Thai.*$/i, "");
   const parts = [name];
   if (known) parts.push(known.gender[locale]);
-  if (quality(voice) === 0) parts.push(locale === "th" ? "เสียงธรรมชาติ (ใช้อินเทอร์เน็ต)" : "natural voice (needs internet)");
+  if (quality(voice) === 0) parts.push(locale === "th" ? "เสียงธรรมชาติ ชัดที่สุด (ใช้อินเทอร์เน็ต)" : "natural, clearest (needs internet)");
   else if (voice.localService) parts.push(locale === "th" ? "ในเครื่อง" : "on this computer");
   return parts.join(" · ");
 }
@@ -114,6 +114,8 @@ let primed = false;
 const SETTLE_MS = 250;
 /** A voice that hasn't started within this time is treated as silent and the fallback is tried. */
 const START_TIMEOUT_MS = 4000;
+/** The breath between phrases — about what a person leaves between clauses when announcing. */
+const PHRASE_PAUSE_MS = 400;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -229,12 +231,32 @@ function utterances(text: string, voice: SpeechSynthesisVoice, rate: number, vol
   });
 }
 
+/** Speaks phrases one after another with a short pause; returns the first error and the phrase it happened on. */
+async function speakPhrases(
+  phrases: string[],
+  from: number,
+  voice: SpeechSynthesisVoice,
+  rate: number,
+  volume: number,
+  mine: number,
+): Promise<{ error: string | null; index: number }> {
+  for (let index = from; index < phrases.length; index += 1) {
+    const error = await playQueue(utterances(phrases[index]!, voice, rate, volume), mine);
+    if (error !== null || mine !== generation) return { error, index };
+    if (index < phrases.length - 1) {
+      await sleep(PHRASE_PAUSE_MS);
+      if (mine !== generation) return { error: null, index };
+    }
+  }
+  return { error: null, index: phrases.length };
+}
+
 /**
- * Speaks Thai text with the chosen voice (or the best Thai voice). Never hangs the caller. If the voice fails or
- * stays silent (e.g. an online voice on a weak exam-room network), it tries once more with another Thai voice,
- * preferring one installed on the computer.
+ * Speaks Thai phrases with the chosen voice (or the best Thai voice), pausing between phrases like a person
+ * would. Never hangs the caller. If the voice fails or stays silent (e.g. an online voice on a weak exam-room
+ * network), it carries on from that phrase with another Thai voice, preferring one installed on the computer.
  */
-export async function speakThai(text: string, options: { voiceUri: string; rate: number; volume: number }): Promise<SpeakResult> {
+export async function speakThai(phrases: string[], options: { voiceUri: string; rate: number; volume: number }): Promise<SpeakResult> {
   if (!speechSupported()) return { status: "unsupported", voice: null };
   const synth = window.speechSynthesis;
   stopSpeaking();
@@ -243,23 +265,24 @@ export async function speakThai(text: string, options: { voiceUri: string; rate:
   if (mine !== generation) return { status: "stopped", voice: null };
   const candidates = thaiVoices(all);
   const voice = candidates.find((v) => v.voiceURI === options.voiceUri) ?? candidates[0] ?? null;
-  if (!voice || !text.trim()) return { status: "no-voice", voice: null };
+  const parts = phrases.map((p) => p.trim()).filter(Boolean);
+  if (!voice || !parts.length) return { status: "no-voice", voice: null };
 
   await settle();
   if (mine !== generation) return { status: "stopped", voice };
-  const error = await playQueue(utterances(text, voice, options.rate, options.volume), mine);
+  const first = await speakPhrases(parts, 0, voice, options.rate, options.volume, mine);
   if (mine !== generation) return { status: "stopped", voice };
-  if (error === null) return { status: "ok", voice };
-  if (error === "not-allowed") return { status: "blocked", voice };
+  if (first.error === null) return { status: "ok", voice };
+  if (first.error === "not-allowed") return { status: "blocked", voice };
 
   const fallback = candidates.find((v) => v !== voice && v.localService) ?? candidates.find((v) => v !== voice) ?? null;
-  if (!fallback) return { status: error === "silent" ? "silent" : "error", voice };
+  if (!fallback) return { status: first.error === "silent" ? "silent" : "error", voice };
   stopSpeaking();
   const retryMine = generation;
   await settle();
   if (retryMine !== generation) return { status: "stopped", voice: fallback };
-  const retry = await playQueue(utterances(text, fallback, options.rate, options.volume), retryMine);
+  const retry = await speakPhrases(parts, first.index, fallback, options.rate, options.volume, retryMine);
   if (retryMine !== generation) return { status: "stopped", voice: fallback };
-  if (retry === null) return { status: "ok", voice: fallback };
-  return { status: retry === "not-allowed" ? "blocked" : retry === "silent" ? "silent" : "error", voice: fallback };
+  if (retry.error === null) return { status: "ok", voice: fallback };
+  return { status: retry.error === "not-allowed" ? "blocked" : retry.error === "silent" ? "silent" : "error", voice: fallback };
 }

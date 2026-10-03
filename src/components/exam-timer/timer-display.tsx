@@ -1,7 +1,8 @@
 "use client";
 
 import { forwardRef } from "react";
-import { Megaphone } from "lucide-react";
+import { DoorClosed, DoorOpen, Info, Megaphone } from "lucide-react";
+import { roomNotices, type RoomRules } from "@/lib/exam-timer/room-rules";
 import { cn } from "@/lib/utils";
 import { todayInBangkok } from "@/lib/thai";
 import { displayYear, formatDay, monthName, weekdayName } from "@/lib/i18n/dates";
@@ -53,6 +54,7 @@ export interface TimerDisplayProps {
   room: string;
   theme: DisplayTheme;
   fullscreen: boolean;
+  rules: RoomRules;
   caption?: Caption | null;
   children?: React.ReactNode;
 }
@@ -66,7 +68,7 @@ function bilingualDate(iso: string): string {
 
 /** The projector-facing screen. Sizes itself to its container with container-query units. */
 export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(function TimerDisplay(
-  { session, now, title, room, theme, fullscreen, caption, children },
+  { session, now, title, room, theme, fullscreen, rules, caption, children },
   ref,
 ) {
   const dark = theme === "dark";
@@ -77,6 +79,7 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
   const justEnded = session !== null && phase === "ended" && now - session.endAt < 12_000;
   const extension = session ? extensionMs(session) : 0;
   const plannedEnd = session ? session.endAt - extension : 0;
+  const notices = session ? roomNotices(session, now, rules) : [];
   const dateText = now > 0 ? bilingualDate(todayInBangkok(new Date(now))) : "";
 
   const label =
@@ -180,6 +183,34 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
               </p>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {/* Exam-room rules, worded for right now (the caption takes their place while it is shown) */}
+      {notices.length && !caption ? (
+        <div className="flex flex-wrap items-center justify-center gap-[1.2cqw] px-[4cqw] pb-[1.6cqw]">
+          {notices.map((notice) => {
+            const Icon = notice.state === "open" ? DoorOpen : notice.state === "closed" ? DoorClosed : Info;
+            return (
+              <span
+                key={notice.key}
+                className={cn(
+                  "flex items-center gap-[0.9cqw] rounded-[1.6cqw] px-[1.6cqw] py-[0.6cqw] text-[1.8cqw] font-medium",
+                  notice.state === "open" && (dark ? "bg-emerald-400/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"),
+                  notice.state === "closed" && (dark ? "bg-rose-400/15 text-rose-200" : "bg-rose-50 text-rose-700"),
+                  notice.state === "info" && (dark ? "bg-white/10 text-white/75" : "bg-neutral-100 text-neutral-600"),
+                )}
+              >
+                <Icon className="size-[2.2cqw] shrink-0" aria-hidden />
+                <span className="flex flex-col leading-tight">
+                  <span lang="th">{notice.text.th}</span>
+                  <span lang="en" className="font-[family-name:var(--font-latin)] text-[1.5cqw] font-normal opacity-80">
+                    {notice.text.en}
+                  </span>
+                </span>
+              </span>
+            );
+          })}
         </div>
       ) : null}
 

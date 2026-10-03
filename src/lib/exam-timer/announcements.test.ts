@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIVE_MINUTE_TEXT, announcementText, captionFor, speakableThai } from "./announcements";
+import { FIVE_MINUTE_TEXT, announcementText, captionFor, speakableThai, thaiPhrases } from "./announcements";
 import { splitForSpeech, thaiVoices, voiceLabel } from "./speech";
 
 describe("5-minute announcement", () => {
@@ -18,6 +18,22 @@ describe("5-minute announcement", () => {
     expect(speakableThai(FIVE_MINUTE_TEXT)).toBe("เหลือเวลาสอบอีก 5 นาที กรุณาตรวจสอบความถูกต้อง และอย่าลืมเขียนชื่อและเลขที่ ไอดี");
     expect(speakableThai("หมดเวลา 12:30 น.")).toBe("หมดเวลา 12 นาฬิกา 30 นาที");
     expect(speakableThai("เลิก 15.00 น. / ห้อง DT01")).toBe("เลิก 15 นาฬิกาตรง ห้อง DT01");
+  });
+});
+
+describe("speaking in phrases", () => {
+  it("breaks where a person would breathe, keeping numbers with their units", () => {
+    expect(thaiPhrases(speakableThai(FIVE_MINUTE_TEXT))).toEqual([
+      "เหลือเวลาสอบอีก 5 นาที",
+      "กรุณาตรวจสอบความถูกต้อง",
+      "และอย่าลืมเขียนชื่อและเลขที่ ไอดี",
+    ]);
+    expect(thaiPhrases("การสอบจะสิ้นสุดเวลา 12 นาฬิกา 30 นาที กรุณาวางปากกา")).toEqual(["การสอบจะสิ้นสุดเวลา 12 นาฬิกา 30 นาที", "กรุณาวางปากกา"]);
+  });
+
+  it("always breaks at commas, full stops and new lines", () => {
+    expect(thaiPhrases("เหลือ 5 นาที, ตรวจคำตอบ\nเขียนชื่อ")).toEqual(["เหลือ 5 นาที", "ตรวจคำตอบ", "เขียนชื่อ"]);
+    expect(thaiPhrases("")).toEqual([]);
   });
 });
 
@@ -43,7 +59,7 @@ describe("voices", () => {
 
   it("describes a voice in plain words", () => {
     expect(voiceLabel(voice("Microsoft Premwadee Online (Natural) - Thai (Thailand)", "th-TH", false), "th")).toBe(
-      "Premwadee · หญิง · เสียงธรรมชาติ (ใช้อินเทอร์เน็ต)",
+      "Premwadee · หญิง · เสียงธรรมชาติ ชัดที่สุด (ใช้อินเทอร์เน็ต)",
     );
     expect(voiceLabel(voice("Microsoft Pattara - Thai (Thailand)", "th-TH", true), "en")).toBe("Pattara · male · on this computer");
   });

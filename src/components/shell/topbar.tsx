@@ -75,7 +75,7 @@ export function Topbar() {
 
       <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
         <Link href="/" className="rounded text-neutral-500 outline-none transition-colors hover:text-neutral-800 focus-visible:shadow-[var(--shadow-focus)]">
-          DentOps
+          Dentboard
         </Link>
         {current && current.href !== "/" ? (
           <>

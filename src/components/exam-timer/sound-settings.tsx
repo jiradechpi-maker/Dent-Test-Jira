@@ -32,8 +32,8 @@ export interface SoundSettingsProps {
 
 const RATE_LABELS: Record<(typeof RATE_OPTIONS)[number], { th: string; en: string }> = {
   0.8: { th: "ช้า", en: "Slow" },
-  0.95: { th: "ปกติ", en: "Normal" },
-  1.1: { th: "เร็ว", en: "Fast" },
+  0.9: { th: "ปกติ", en: "Normal" },
+  1.0: { th: "เร็ว", en: "Fast" },
 };
 
 /** Sound for the exam room: one optional spoken 5-minute warning, a voice, a chime and the volume — each with a test button. */

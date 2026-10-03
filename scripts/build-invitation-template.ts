@@ -322,7 +322,7 @@ const examSection = [
 ];
 
 const doc = new Document({
-  creator: "DentOps — คณะทันตแพทยศาสตร์ สจล.",
+  creator: "Dentboard — คณะทันตแพทยศาสตร์ สจล.",
   title: "หนังสือเชิญอาจารย์พิเศษ",
   description: "Template: invitation letter for special lecturers (docxtemplater tags)",
   styles: {

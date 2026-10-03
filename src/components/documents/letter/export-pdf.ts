@@ -33,7 +33,7 @@ export async function exportLetterPdf(fileName: string, title: string): Promise<
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
   // i18n-exempt: document properties belong to the official Thai letter, so they stay Thai whatever the UI language.
-  pdf.setProperties({ title, creator: "DentOps — คณะทันตแพทยศาสตร์ สจล." });
+  pdf.setProperties({ title, creator: "Dentboard — คณะทันตแพทยศาสตร์ สจล." });
   for (const [index, page] of pages.entries()) {
     const png = await toPng(page, { pixelRatio: 3, backgroundColor: "#ffffff", fontEmbedCSS, cacheBust: false });
     if (index > 0) pdf.addPage("a4", "portrait");

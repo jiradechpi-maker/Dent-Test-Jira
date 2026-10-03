@@ -35,3 +35,31 @@ export function speakableThai(text: string): string {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+const UNIT = /^(นาที|ชั่วโมง|นาฬิกา|นาฬิกาตรง|วินาที|ครั้ง|ข้อ|หน้า|แผ่น|คน|ชุด)$/;
+
+/**
+ * Splits Thai text into the phrases a person would say in one breath, so the voice can pause between them.
+ * Thai marks phrase breaks with spaces, but a space also separates a number from its unit ("อีก 5 นาที") and
+ * short words like "ไอดี" — those stay with their phrase. Commas, full stops and new lines always break.
+ */
+export function thaiPhrases(text: string): string[] {
+  const phrases: string[] = [];
+  for (const sentence of text.split(/[,;!?\n]+|(?<!\d)\.(?!\d)/)) {
+    let current: string[] = [];
+    for (const token of sentence.trim().split(/\s+/).filter(Boolean)) {
+      const previous = current.at(-1);
+      const joins =
+        previous !== undefined && (/^\d/.test(token) || /\d$/.test(previous) || UNIT.test(token) || token.length <= 4 || current.join(" ").length <= 4);
+      if (!current.length || joins) {
+        current.push(token);
+      } else {
+        phrases.push(current.join(" "));
+        current = [token];
+      }
+    }
+    if (current.length) phrases.push(current.join(" "));
+  }
+  return phrases;
+}
+

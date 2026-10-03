@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,17 @@ import {
 } from "@/lib/exam-timer/timing";
 import { isAudioReady, playChime, playSound, setVolume, unlockAudio, type ChimeStyle, type ExamSound } from "@/lib/exam-timer/sounds";
 import { primeSpeech } from "@/lib/exam-timer/speech";
+import {
+  DEFAULT_RULE_PRESET,
+  EARLY_LEAVE_OPTIONS,
+  LAST_LEAVE_OPTIONS,
+  LATE_ENTRY_OPTIONS,
+  RULE_PRESETS,
+  describeRules,
+  rulesFor,
+  type RoomRules,
+  type RulePresetId,
+} from "@/lib/exam-timer/room-rules";
 import { TimerDisplay, type DisplayTheme } from "./timer-display";
 import { DEFAULT_ANNOUNCE, normalizeAnnounce, useAnnouncer, type AnnounceSettings } from "./use-announcer";
 import { SoundSettings } from "./sound-settings";
@@ -45,8 +56,13 @@ interface TimerSettings {
   sound: boolean;
   volume: number;
   theme: DisplayTheme;
+  rulesPreset: RulePresetId;
+  /** Used when rulesPreset is "custom". */
+  customRules: RoomRules;
   announce: AnnounceSettings;
 }
+
+const PRESET_IDS: readonly RulePresetId[] = [...RULE_PRESETS.map((p) => p.id), "custom"];
 
 const DEFAULT_SETTINGS: TimerSettings = {
   title: "",
@@ -56,8 +72,32 @@ const DEFAULT_SETTINGS: TimerSettings = {
   sound: true,
   volume: 0.85,
   theme: "dark",
+  rulesPreset: DEFAULT_RULE_PRESET,
+  customRules: { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 15 },
   announce: DEFAULT_ANNOUNCE,
 };
+
+const minutesIn = (value: unknown, options: readonly number[], fallback: number) =>
+  typeof value === "number" && options.includes(value) ? value : fallback;
+
+/** Rules saved by an earlier version as three numbers: use the matching preset, otherwise "custom". */
+function storedRules(raw: Record<string, unknown>): Pick<TimerSettings, "rulesPreset" | "customRules"> {
+  const custom = (raw.customRules ?? raw) as Record<string, unknown>;
+  const customRules: RoomRules = {
+    lateEntryMinutes: minutesIn(custom.lateEntryMinutes, LATE_ENTRY_OPTIONS, DEFAULT_SETTINGS.customRules.lateEntryMinutes),
+    earlyLeaveMinutes: minutesIn(custom.earlyLeaveMinutes, EARLY_LEAVE_OPTIONS, DEFAULT_SETTINGS.customRules.earlyLeaveMinutes),
+    lastLeaveMinutes: minutesIn(custom.lastLeaveMinutes, LAST_LEAVE_OPTIONS, DEFAULT_SETTINGS.customRules.lastLeaveMinutes),
+  };
+  if (PRESET_IDS.includes(raw.rulesPreset as RulePresetId)) return { rulesPreset: raw.rulesPreset as RulePresetId, customRules };
+  if (typeof raw.lateEntryMinutes !== "number") return { rulesPreset: DEFAULT_RULE_PRESET, customRules };
+  const match = RULE_PRESETS.find(
+    (p) =>
+      p.rules.lateEntryMinutes === customRules.lateEntryMinutes &&
+      p.rules.earlyLeaveMinutes === customRules.earlyLeaveMinutes &&
+      p.rules.lastLeaveMinutes === customRules.lastLeaveMinutes,
+  );
+  return { rulesPreset: match?.id ?? "custom", customRules };
+}
 
 interface StoredState {
   settings: TimerSettings;
@@ -115,6 +155,7 @@ function readStored(today: string): StoredState | null {
       sound: typeof raw.sound === "boolean" ? raw.sound : true,
       volume: typeof raw.volume === "number" && raw.volume >= MIN_VOLUME && raw.volume <= 1 ? raw.volume : DEFAULT_SETTINGS.volume,
       theme: raw.theme === "light" ? "light" : "dark",
+      ...storedRules(raw),
       announce: key === STORAGE_KEY ? normalizeAnnounce(raw.announce) : legacyAnnounce(raw),
     };
     return { settings, session: isValidSession(parsed.session) ? parsed.session : null };
@@ -485,6 +526,8 @@ export function ExamTimer() {
   }, [now, settings.endTime, settings.startTime]);
 
   const running = session !== null && phase !== "ended";
+  const rules = rulesFor(settings.rulesPreset, settings.customRules);
+  const preset = RULE_PRESETS.find((p) => p.id === settings.rulesPreset);
 
   const controlBar = (
     <div
@@ -536,6 +579,7 @@ export function ExamTimer() {
             room={settings.room}
             theme={settings.theme}
             fullscreen={fullscreen}
+            rules={rules}
             caption={announcer.caption}
           >
             {hydrated && fullscreen ? controlBar : null}
@@ -596,125 +640,176 @@ export function ExamTimer() {
         </div>
       </div>
 
-      {/* ── Setup ── */}
+      {/* ── Setup: three short steps, then the sound card ── */}
       <div className="flex flex-col gap-5">
         <Card className="h-fit">
           <CardHeader>
             <div>
-              <CardTitle>{t("ตั้งเวลาสอบ", "Exam time")}</CardTitle>
-              <CardDescription>{t("ใส่เวลาตามตารางสอบ แล้วกดเริ่ม", "Enter the scheduled times, then press start")}</CardDescription>
+              <CardTitle>{t("ตั้งค่าการสอบ", "Exam setup")}</CardTitle>
+              <CardDescription>{t("ทำตามขั้นตอน 1–3 แล้วกดเริ่มจับเวลา", "Fill in steps 1–3, then start the timer")}</CardDescription>
             </div>
             {running ? <Badge tone="success">{t("กำลังจับเวลา", "Running")}</Badge> : null}
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {todaysExams.length ? (
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <CalendarClock className="size-3.5 text-brand-600" aria-hidden /> {t("สอบวันนี้ (กดเพื่อเติมให้)", "Today's exams (tap to fill in)")}
-                </Label>
-                <ul className="flex flex-col gap-1">
-                  {todaysExams.map((entry) => {
-                    const active = settings.title === entry.title && settings.startTime === entry.start && settings.endTime === entry.end;
-                    return (
-                      <li key={entry.id}>
-                        <button
-                          type="button"
-                          onClick={() => pickExam(entry)}
-                          className={cn(
-                            "flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left text-xs transition-colors",
-                            active ? "border-brand-600 bg-brand-50" : "border-border hover:border-brand-300 hover:bg-brand-50/50",
-                          )}
-                        >
-                          <span className="shrink-0 font-[family-name:var(--font-latin)] font-semibold tabular">
-                            {entry.start}–{entry.end}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">{entry.title}</span>
-                          {entry.rooms.length ? <span className="shrink-0 text-muted-foreground">{entry.rooms.join(", ")}</span> : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : null}
-
-            <Field label={t("ชื่อการสอบ / รายวิชา", "Exam / course")} htmlFor="timer-title">
-              <Input
-                id="timer-title"
-                value={settings.title}
-                onChange={(e) => update("title", e.target.value)}
-                placeholder={t("เช่น Fixed Prosthodontics — Midterm", "e.g. Fixed Prosthodontics — Midterm")}
-                maxLength={120}
-              />
-            </Field>
-            <Field label={t("ห้องสอบ", "Room")} htmlFor="timer-room">
-              <Input
-                id="timer-room"
-                value={settings.room}
-                onChange={(e) => update("room", e.target.value)}
-                placeholder={t("เช่น DT01 · ตึก 55", "e.g. DT01 · Building 55")}
-                maxLength={80}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="timer-start">{t("เริ่มสอบ", "Start")}</Label>
+          <CardContent className="flex flex-col gap-5">
+            <Step number={1} title={t("การสอบ", "Exam")}>
+              {todaysExams.length ? (
+                <div className="flex flex-col gap-1.5">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CalendarClock className="size-3.5 text-brand-600" aria-hidden /> {t("สอบวันนี้ — กดเพื่อเติมให้", "Today's exams — tap to fill in")}
+                  </span>
+                  <ul className="flex flex-col gap-1">
+                    {todaysExams.map((entry) => {
+                      const active = settings.title === entry.title && settings.startTime === entry.start && settings.endTime === entry.end;
+                      return (
+                        <li key={entry.id}>
+                          <button
+                            type="button"
+                            onClick={() => pickExam(entry)}
+                            aria-pressed={active}
+                            className={cn(
+                              "flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left text-xs transition-colors",
+                              active ? "border-brand-600 bg-brand-50" : "border-border hover:border-brand-300 hover:bg-brand-50/50",
+                            )}
+                          >
+                            <span className="shrink-0 font-[family-name:var(--font-latin)] font-semibold tabular">
+                              {entry.start}–{entry.end}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+                            {entry.rooms.length ? <span className="shrink-0 text-muted-foreground">{entry.rooms.join(", ")}</span> : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+              <Field label={t("ชื่อการสอบ / รายวิชา", "Exam / course")} htmlFor="timer-title">
                 <Input
-                  id="timer-start"
-                  type="time"
-                  value={settings.startTime}
-                  onChange={(e) => update("startTime", e.target.value)}
-                  className="h-10 text-base tabular"
+                  id="timer-title"
+                  value={settings.title}
+                  onChange={(e) => update("title", e.target.value)}
+                  placeholder={t("เช่น Fixed Prosthodontics — Midterm", "e.g. Fixed Prosthodontics — Midterm")}
+                  maxLength={120}
                 />
-                <button
-                  type="button"
-                  onClick={() => void begin(null)}
-                  className="w-fit cursor-pointer text-xs font-medium text-brand-700 hover:underline"
-                >
-                  {t("เริ่มสอบเดี๋ยวนี้", "Start now")}
-                </button>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="timer-end">
-                  {t("เลิกสอบ", "Finish")} <span className="text-danger">*</span>
-                </Label>
+              </Field>
+              <Field label={t("ห้องสอบ", "Room")} htmlFor="timer-room">
                 <Input
-                  id="timer-end"
-                  type="time"
-                  value={settings.endTime}
-                  onChange={(e) => update("endTime", e.target.value)}
-                  aria-invalid={error !== null}
-                  className="h-10 text-base tabular"
+                  id="timer-room"
+                  value={settings.room}
+                  onChange={(e) => update("room", e.target.value)}
+                  placeholder={t("เช่น DT01 · ตึก 55", "e.g. DT01 · Building 55")}
+                  maxLength={80}
                 />
-              </div>
-            </div>
+              </Field>
+            </Step>
 
-            {preview ? (
-              <p className="flex items-center gap-1.5 rounded-[var(--radius-control)] bg-brand-50 px-2.5 py-2 text-xs text-brand-900">
-                <Clock3 className="size-3.5 shrink-0" aria-hidden />
-                {t(
-                  `เวลาสอบ ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} น. · รวม ${formatDuration(preview.endAt - preview.startAt, "th")}`,
-                  `Exam ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} · ${formatDuration(preview.endAt - preview.startAt, "en")}`,
-                )}
+            <Step number={2} title={t("เวลาสอบ", "Time")}>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="timer-start">{t("เริ่ม", "Start")}</Label>
+                  <Input
+                    id="timer-start"
+                    type="time"
+                    value={settings.startTime}
+                    onChange={(e) => update("startTime", e.target.value)}
+                    className="h-11 text-base tabular"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="timer-end">
+                    {t("เลิก", "Finish")} <span className="text-danger">*</span>
+                  </Label>
+                  <Input
+                    id="timer-end"
+                    type="time"
+                    value={settings.endTime}
+                    onChange={(e) => update("endTime", e.target.value)}
+                    aria-invalid={error !== null}
+                    className="h-11 text-base tabular"
+                  />
+                </div>
+              </div>
+              {preview ? (
+                <p className="flex items-center gap-1.5 rounded-[var(--radius-control)] bg-brand-50 px-2.5 py-2 text-xs text-brand-900">
+                  <Clock3 className="size-3.5 shrink-0" aria-hidden />
+                  {t(
+                    `เวลาสอบ ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} น. · รวม ${formatDuration(preview.endAt - preview.startAt, "th")}`,
+                    `Exam ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} · ${formatDuration(preview.endAt - preview.startAt, "en")}`,
+                  )}
+                </p>
+              ) : null}
+            </Step>
+
+            <Step number={3} title={t("กติกาห้องสอบ (แสดงบนจอ)", "Room rules (on screen)")}>
+              <NativeSelect
+                aria-label={t("กติกาห้องสอบ", "Room rules")}
+                value={settings.rulesPreset}
+                onChange={(e) => update("rulesPreset", e.target.value as RulePresetId)}
+                className="h-10"
+              >
+                {RULE_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {t(p.name)}
+                  </option>
+                ))}
+                <option value="custom">{t("กำหนดเอง", "Custom")}</option>
+              </NativeSelect>
+              {settings.rulesPreset === "custom" ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <RuleSelect
+                    label={t("เข้าห้องได้ภายใน", "Late entry up to")}
+                    options={LATE_ENTRY_OPTIONS}
+                    value={settings.customRules.lateEntryMinutes}
+                    onChange={(v) => update("customRules", { ...settings.customRules, lateEntryMinutes: v })}
+                  />
+                  <RuleSelect
+                    label={t("ออกได้หลัง", "Leave after")}
+                    options={EARLY_LEAVE_OPTIONS}
+                    value={settings.customRules.earlyLeaveMinutes}
+                    onChange={(v) => update("customRules", { ...settings.customRules, earlyLeaveMinutes: v })}
+                  />
+                  <RuleSelect
+                    label={t("งดออกช่วงท้าย", "No leaving, final")}
+                    options={LAST_LEAVE_OPTIONS}
+                    value={settings.customRules.lastLeaveMinutes}
+                    onChange={(v) => update("customRules", { ...settings.customRules, lastLeaveMinutes: v })}
+                  />
+                </div>
+              ) : null}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t(describeRules(rules))}
+                {preset?.source.th ? (
+                  <span className="block text-[11px]">
+                    {t("อ้างอิง: ", "Based on: ")}
+                    {t(preset.source)}
+                  </span>
+                ) : null}
               </p>
-            ) : null}
+            </Step>
+
             {error ? (
               <p role="alert" className="text-xs text-danger">
                 {error}
               </p>
             ) : null}
-
-            <Button size="lg" onClick={() => void begin(settings.startTime)} className="h-11 text-sm">
-              {session ? <RotateCcw aria-hidden /> : <Play aria-hidden />}
-              {session ? t("ตั้งเวลาใหม่", "Reset timer") : t("เริ่มจับเวลา", "Start timer")}
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button size="lg" onClick={() => void begin(settings.startTime)} className="h-12 text-sm">
+                {session ? <RotateCcw aria-hidden /> : <Play aria-hidden />}
+                {session ? t("ตั้งเวลาใหม่", "Reset timer") : t("เริ่มจับเวลา", "Start timer")}
+              </Button>
+              <Button variant="secondary" onClick={() => void begin(null)}>
+                <Play aria-hidden /> {t("เริ่มสอบเดี๋ยวนี้ (ไม่รอเวลาเริ่ม)", "Start the exam now")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="h-fit">
           <CardHeader>
-            <CardTitle>{t("เสียง", "Sound")}</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <StepNumber number={4} />
+              {t("เสียง", "Sound")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <SoundSettings
@@ -737,5 +832,51 @@ export function ExamTimer() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function StepNumber({ number }: { number: number }) {
+  return (
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-600 font-[family-name:var(--font-latin)] text-[11px] font-semibold text-white">
+      {number}
+    </span>
+  );
+}
+
+function Step({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
+        <StepNumber number={number} />
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function RuleSelect({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly number[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const t = useT();
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <NativeSelect value={value} onChange={(e) => onChange(Number(e.target.value))} className="h-9 text-xs">
+        {options.map((m) => (
+          <option key={m} value={m}>
+            {m === 0 ? t("ไม่กำหนด", "Off") : t(`${m} นาที`, `${m} min`)}
+          </option>
+        ))}
+      </NativeSelect>
+    </label>
   );
 }
