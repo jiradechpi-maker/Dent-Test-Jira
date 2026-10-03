@@ -15,7 +15,6 @@ export const metadata: Metadata = {
   },
   description: "ระบบบริหารจัดการงานวิชาการและเอกสารอัตโนมัติ คณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
   applicationName: "DentOps",
-  icons: { icon: "/brand/kmitl-emblem.jpeg" },
 };
 
 export const viewport: Viewport = {
