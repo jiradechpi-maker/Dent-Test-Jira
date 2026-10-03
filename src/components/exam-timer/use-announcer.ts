@@ -28,13 +28,19 @@ export const DEFAULT_ANNOUNCE: AnnounceSettings = {
   chime: "dingdong",
 };
 
+/** A speed saved by an earlier version (e.g. 1.1 "fast", 0.95) becomes the closest of today's three; ties go slower. */
+function nearestRate(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_ANNOUNCE.rate;
+  return RATE_OPTIONS.reduce<number>((best, rate) => (Math.abs(rate - value) < Math.abs(best - value) - 1e-9 ? rate : best), RATE_OPTIONS[0]);
+}
+
 export function normalizeAnnounce(value: unknown): AnnounceSettings {
   const v = (typeof value === "object" && value !== null ? value : {}) as Partial<AnnounceSettings>;
   return {
     fiveMinutes: typeof v.fiveMinutes === "boolean" ? v.fiveMinutes : DEFAULT_ANNOUNCE.fiveMinutes,
     text: typeof v.text === "string" ? v.text : "",
     voiceUri: typeof v.voiceUri === "string" ? v.voiceUri : "",
-    rate: (RATE_OPTIONS as readonly number[]).includes(v.rate as number) ? (v.rate as number) : DEFAULT_ANNOUNCE.rate,
+    rate: nearestRate(v.rate),
     chime: (CHIME_STYLES as readonly string[]).includes(v.chime as string) ? (v.chime as ChimeStyle) : DEFAULT_ANNOUNCE.chime,
   };
 }

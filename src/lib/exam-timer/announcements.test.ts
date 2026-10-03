@@ -6,6 +6,7 @@ describe("5-minute announcement", () => {
   it("uses the faculty's wording by default", () => {
     expect(FIVE_MINUTE_TEXT).toBe("เหลือเวลาสอบอีก 5 นาที กรุณาตรวจสอบความถูกต้อง และอย่าลืมเขียนชื่อและเลขที่ ID");
     expect(announcementText("   ")).toBe(FIVE_MINUTE_TEXT);
+    expect(announcementText(" , . ")).toBe(FIVE_MINUTE_TEXT);
     expect(announcementText(" เหลือ 5 นาที ")).toBe("เหลือ 5 นาที");
   });
 
@@ -33,7 +34,28 @@ describe("speaking in phrases", () => {
 
   it("always breaks at commas, full stops and new lines", () => {
     expect(thaiPhrases("เหลือ 5 นาที, ตรวจคำตอบ\nเขียนชื่อ")).toEqual(["เหลือ 5 นาที", "ตรวจคำตอบ", "เขียนชื่อ"]);
+    expect(thaiPhrases("วางปากกา. ส่งกระดาษคำตอบ... รอสักครู่")).toEqual(["วางปากกา", "ส่งกระดาษคำตอบ", "รอสักครู่"]);
     expect(thaiPhrases("")).toEqual([]);
+  });
+
+  it("reads titles, Thai digits and times as words without cutting them in half", () => {
+    const say = (text: string) => thaiPhrases(speakableThai(text));
+    expect(say("ส่งกระดาษคำตอบให้ อ.สมชาย")).toEqual(["ส่งกระดาษคำตอบให้", "อาจารย์สมชาย"]);
+    expect(say("ติดต่อ ผศ.ดร.สมชาย")).toEqual(["ติดต่อ", "ผู้ช่วยศาสตราจารย์ดอกเตอร์สมชาย"]);
+    expect(say("ปีการศึกษา พ.ศ. 2569")).toEqual(["ปีการศึกษา", "พุทธศักราช 2569"]);
+    expect(say("กรุณารอต่อ. แล้วออกจากห้อง")).toEqual(["กรุณารอต่อ", "แล้วออกจากห้อง"]);
+    expect(say("สอบถึงเวลา ๑๒.๓๐ น. กรุณาวางปากกา")).toEqual(["สอบถึงเวลา 12 นาฬิกา 30 นาที", "กรุณาวางปากกา"]);
+    expect(say("เวลา 12:30 กรุณาวางปากกา")).toEqual(["เวลา 12 นาฬิกา 30 นาที", "กรุณาวางปากกา"]);
+    expect(speakableThai("ได้ 1.50 คะแนน")).toBe("ได้ 1.50 คะแนน");
+    expect(speakableThai("ส่งถึง 16.45")).toBe("ส่งถึง 16 นาฬิกา 45 นาที");
+  });
+
+  it("keeps English words and short joining words in the right phrase", () => {
+    expect(thaiPhrases("กรุณาตรวจ Answer Sheet ให้เรียบร้อย")).toEqual(["กรุณาตรวจ", "Answer Sheet", "ให้เรียบร้อย"]);
+    expect(thaiPhrases("Please check your answers and write your name")).toEqual(["Please check your answers and write your name"]);
+    expect(thaiPhrases("ตรวจคำตอบ และ เขียนชื่อ")).toEqual(["ตรวจคำตอบ", "และ เขียนชื่อ"]);
+    expect(thaiPhrases("ข้อ 1-10 ทำในกระดาษคำตอบ ข้อ 11 เขียนในสมุด")).toEqual(["ข้อ 1-10", "ทำในกระดาษคำตอบ", "ข้อ 11", "เขียนในสมุด"]);
+    expect(thaiPhrases("ทำให้ครบ 10 ข้อ ก่อนส่ง")).toEqual(["ทำให้ครบ 10 ข้อ", "ก่อนส่ง"]);
   });
 });
 

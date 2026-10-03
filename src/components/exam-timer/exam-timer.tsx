@@ -99,6 +99,21 @@ function storedRules(raw: Record<string, unknown>): Pick<TimerSettings, "rulesPr
   return { rulesPreset: match?.id ?? "custom", customRules };
 }
 
+const hasRules = (raw: Record<string, unknown>) => typeof raw.rulesPreset === "string" || typeof raw.lateEntryMinutes === "number";
+
+/** The previous build saved its settings without room rules; the rules saved before that are still in an older key. */
+function legacyRules(): Record<string, unknown> | null {
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      const raw = (JSON.parse(window.localStorage.getItem(key) ?? "null") as { settings?: Record<string, unknown> } | null)?.settings;
+      if (raw && hasRules(raw)) return raw;
+    } catch {
+      // A damaged old entry is simply skipped.
+    }
+  }
+  return null;
+}
+
 interface StoredState {
   settings: TimerSettings;
   session: ExamSession | null;
@@ -155,7 +170,7 @@ function readStored(today: string): StoredState | null {
       sound: typeof raw.sound === "boolean" ? raw.sound : true,
       volume: typeof raw.volume === "number" && raw.volume >= MIN_VOLUME && raw.volume <= 1 ? raw.volume : DEFAULT_SETTINGS.volume,
       theme: raw.theme === "light" ? "light" : "dark",
-      ...storedRules(raw),
+      ...storedRules(hasRules(raw) ? raw : (legacyRules() ?? raw)),
       announce: key === STORAGE_KEY ? normalizeAnnounce(raw.announce) : legacyAnnounce(raw),
     };
     return { settings, session: isValidSession(parsed.session) ? parsed.session : null };
@@ -744,7 +759,16 @@ export function ExamTimer() {
               <NativeSelect
                 aria-label={t("กติกาห้องสอบ", "Room rules")}
                 value={settings.rulesPreset}
-                onChange={(e) => update("rulesPreset", e.target.value as RulePresetId)}
+                onChange={(e) => {
+                  const next = e.target.value as RulePresetId;
+                  // "Custom" starts from the rules that were showing, so staff only change the one number they need.
+                  setSettings((s) => ({
+                    ...s,
+                    rulesPreset: next,
+                    customRules: next === "custom" && s.rulesPreset !== "custom" ? rulesFor(s.rulesPreset, s.customRules) : s.customRules,
+                  }));
+                  setError(null);
+                }}
                 className="h-10"
               >
                 {RULE_PRESETS.map((p) => (

@@ -98,28 +98,44 @@ export interface RoomNotice {
   state: "open" | "closed" | "info";
 }
 
-/** The door rules, worded for the current moment, in Thai and English. */
+/**
+ * The door rules, worded for the current moment, in Thai and English. Whether a rule fits the exam is judged on
+ * the planned length, so a "+5 นาที" extension never makes a notice appear half-way through.
+ */
 export function roomNotices(session: ExamSession, now: number, rules: RoomRules): RoomNotice[] {
   const phase = phaseAt(session, now);
   if (phase === "ended") return [];
   const notices: RoomNotice[] = [];
-  const total = session.endAt - session.startAt;
-  if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * 60_000 < total) {
-    const until = formatClock(session.startAt + rules.lateEntryMinutes * 60_000);
+  const minute = 60_000;
+  const plannedEnd = session.plannedEndAt ?? session.endAt;
+  const plannedTotal = plannedEnd - session.startAt;
+
+  if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * minute < plannedTotal) {
+    const until = formatClock(session.startAt + rules.lateEntryMinutes * minute);
     const openText = { th: `เข้าห้องสอบได้ถึง ${until} น.`, en: `Late entry until ${until}` };
     if (phase === "waiting") notices.push({ key: "entry", state: "info", text: openText });
-    else if (now < session.startAt + rules.lateEntryMinutes * 60_000) notices.push({ key: "entry", state: "open", text: openText });
+    else if (now < session.startAt + rules.lateEntryMinutes * minute) notices.push({ key: "entry", state: "open", text: openText });
     else notices.push({ key: "entry", state: "closed", text: { th: `ปิดรับเข้าห้องสอบแล้ว (${until} น.)`, en: `Entry closed (${until})` } });
   }
-  const leaveFrom = rules.earlyLeaveMinutes > 0 ? session.startAt + rules.earlyLeaveMinutes * 60_000 : session.startAt;
-  const leaveUntil = rules.lastLeaveMinutes > 0 ? session.endAt - rules.lastLeaveMinutes * 60_000 : session.endAt;
-  if (rules.earlyLeaveMinutes > 0 && leaveFrom < leaveUntil) {
+
+  const lastFits = rules.lastLeaveMinutes > 0 && rules.lastLeaveMinutes * minute < plannedTotal;
+  const leaveFrom = session.startAt + rules.earlyLeaveMinutes * minute;
+  const leaveUntil = lastFits ? session.endAt - rules.lastLeaveMinutes * minute : session.endAt;
+  const plannedLeaveUntil = lastFits ? plannedEnd - rules.lastLeaveMinutes * minute : plannedEnd;
+
+  if (rules.earlyLeaveMinutes > 0 && leaveFrom >= plannedLeaveUntil) {
+    // e.g. a 1-hour exam with "leave after 60 min": there is no time when leaving is allowed.
+    const text = { th: "ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ", en: "No leaving until the exam ends" };
+    notices.push({ key: "leave", state: phase === "waiting" ? "info" : "closed", text });
+    return notices;
+  }
+  if (rules.earlyLeaveMinutes > 0) {
     const from = formatClock(leaveFrom);
     if (phase === "waiting") notices.push({ key: "leave", state: "info", text: { th: `ออกจากห้องสอบได้ตั้งแต่ ${from} น.`, en: `You may leave from ${from}` } });
     else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: { th: `ยังออกจากห้องสอบไม่ได้ จนถึง ${from} น.`, en: `No leaving until ${from}` } });
     else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: { th: "ออกจากห้องสอบได้แล้ว", en: "You may now leave" } });
   }
-  if (rules.lastLeaveMinutes > 0 && rules.lastLeaveMinutes * 60_000 < total) {
+  if (lastFits) {
     const m = rules.lastLeaveMinutes;
     if (phase === "running" && now >= leaveUntil) {
       notices.push({ key: "last", state: "closed", text: { th: `${m} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา`, en: `Final ${m} minutes — please remain seated` } });

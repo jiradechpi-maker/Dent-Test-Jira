@@ -275,8 +275,9 @@ export async function speakThai(phrases: string[], options: { voiceUri: string; 
   if (first.error === null) return { status: "ok", voice };
   if (first.error === "not-allowed") return { status: "blocked", voice };
 
-  const fallback = candidates.find((v) => v !== voice && v.localService) ?? candidates.find((v) => v !== voice) ?? null;
-  if (!fallback) return { status: first.error === "silent" ? "silent" : "error", voice };
+  // Another Thai voice picks up from the phrase that failed; with only one Thai voice (common in Chrome), that
+  // voice gets one more try, so the room does not hear just the first half of the announcement.
+  const fallback = candidates.find((v) => v !== voice && v.localService) ?? candidates.find((v) => v !== voice) ?? voice;
   stopSpeaking();
   const retryMine = generation;
   await settle();

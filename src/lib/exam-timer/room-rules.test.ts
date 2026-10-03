@@ -51,11 +51,38 @@ describe("door notices on the projector", () => {
     expect(roomNotices(s, at("10:00:00"), rules).map((n) => n.text.en)).toEqual(["Entry closed (09:30)", "You may now leave"]);
   });
 
-  it("shows nothing for rules that are off or don't fit a short exam", () => {
+  it("shows nothing for rules that are off", () => {
     expect(roomNotices(s, at("09:10:00"), { lateEntryMinutes: 0, earlyLeaveMinutes: 0, lastLeaveMinutes: 0 })).toEqual([]);
-    const short = session("09:00", "09:40");
-    // In a 40-minute quiz, "leave after 45 min" never comes; the final-15 window starts at 09:25.
-    expect(roomNotices(short, at("09:05:00"), rules).map((n) => n.key)).toEqual(["entry"]);
-    expect(roomNotices(short, at("09:31:00"), rules).map((n) => n.key)).toEqual(["entry", "last"]);
+  });
+
+  it("says plainly when an exam is too short to leave early", () => {
+    // 40-minute quiz, "leave after 45 min": nobody may leave; "final 15" adds nothing.
+    const quiz = session("09:00", "09:40");
+    expect(texts2(quiz, "09:05:00", rules)).toEqual(["open:เข้าห้องสอบได้ถึง 09:30 น.", "closed:ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ"]);
+    expect(texts2(quiz, "09:31:00", rules)).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "closed:ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ"]);
+    // 70 minutes with the IB preset (leave after 60, none in the final 15): no window either.
+    const ib = { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 15 };
+    expect(texts2(session("09:00", "10:10"), "08:50:00", ib)).toEqual(["info:เข้าห้องสอบได้ถึง 09:30 น.", "info:ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ"]);
+    // 1 hour, KMITL (leave after 60): same.
+    expect(texts2(session("09:00", "10:00"), "09:40:00", { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 0 })).toEqual([
+      "closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)",
+      "closed:ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ",
+    ]);
+  });
+
+  it("judges the rules on the planned length, not on extra time", () => {
+    // A 25-minute quiz has no late-entry notice; adding 10 minutes must not make one appear mid-exam.
+    const quiz = session("09:00", "09:25");
+    const extended = { ...quiz, endAt: quiz.endAt + 10 * 60_000 };
+    const late = { lateEntryMinutes: 30, earlyLeaveMinutes: 0, lastLeaveMinutes: 0 };
+    expect(roomNotices(extended, at("09:20:00"), late)).toEqual([]);
+    // The final-15 window moves with the extension: 12:00 → 12:10 means seated from 11:55.
+    const long = { ...s, endAt: s.endAt + 10 * 60_000 };
+    expect(texts2(long, "11:50:00", rules)).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "open:ออกจากห้องสอบได้แล้ว"]);
+    expect(texts2(long, "11:56:00", rules)).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "closed:15 นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา"]);
   });
 });
+
+function texts2(sess: ReturnType<typeof session>, time: string, rules: Parameters<typeof roomNotices>[2]) {
+  return roomNotices(sess, at(time), rules).map((n) => `${n.state}:${n.text.th}`);
+}
