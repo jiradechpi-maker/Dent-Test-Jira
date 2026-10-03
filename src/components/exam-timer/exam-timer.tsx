@@ -2,23 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  BellRing,
-  CalendarClock,
-  Clock3,
-  Maximize,
-  Minimize,
-  Moon,
-  Play,
-  Plus,
-  RotateCcw,
-  Square,
-  Sun,
-  Volume2,
-  VolumeX,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
+import { BellRing, CalendarClock, Clock3, Maximize, Minimize, Moon, Play, Plus, RotateCcw, Square, Sun, Volume2, VolumeX, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,92 +10,68 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
-import { Segmented } from "@/components/ui/segmented";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { todayInBangkok } from "@/lib/thai";
 import { useScheduleBundle } from "@/components/schedule/use-schedule";
 import { useT } from "@/components/i18n/locale-provider";
 import type { Bi } from "@/lib/i18n/locale";
-import {
-  ANNOUNCEMENT_LABELS,
-  DEFAULT_WARNINGS,
-  WARNING_MINUTES,
-  announcementForMinutes,
-  crossedMoments,
-  isMinuteId,
-  type AnnouncementContext,
-  type AnnouncementId,
-} from "@/lib/exam-timer/announcements";
+import { ANNOUNCE_AT_MINUTES } from "@/lib/exam-timer/announcements";
 import {
   createSession,
-  createSessionFromDuration,
   crossedThresholds,
   didEnd,
   didStart,
   formatClock,
   formatDuration,
   phaseAt,
-  todayAt,
   type ExamSession,
-  type RoomRules,
   type SessionError,
 } from "@/lib/exam-timer/timing";
-import { isAudioReady, playSound, setVolume, unlockAudio, type ExamSound } from "@/lib/exam-timer/sounds";
+import { isAudioReady, playChime, playSound, setVolume, unlockAudio, type ChimeStyle, type ExamSound } from "@/lib/exam-timer/sounds";
+import { primeSpeech } from "@/lib/exam-timer/speech";
 import { TimerDisplay, type DisplayTheme } from "./timer-display";
-import { DEFAULT_VOICE, normalizeVoice, useAnnouncer, type AnnouncementRequest, type VoiceSettings } from "./use-announcer";
-import { VoicePanel } from "./voice-panel";
+import { DEFAULT_ANNOUNCE, normalizeAnnounce, useAnnouncer, type AnnounceSettings } from "./use-announcer";
+import { SoundSettings } from "./sound-settings";
 import { useServerClock } from "./use-server-clock";
 
-const STORAGE_KEY = "dentops.examTimer.v3";
-const LEGACY_STORAGE_KEYS = ["dentops.examTimer.v2", "dentops.examTimer.v1"] as const;
-const DURATION_CHIPS = [60, 90, 120, 150, 180] as const;
-const LATE_ENTRY_OPTIONS = [0, 15, 30, 45] as const;
-const EARLY_LEAVE_OPTIONS = [0, 30, 45, 60] as const;
-const LAST_LEAVE_OPTIONS = [0, 10, 15] as const;
+const STORAGE_KEY = "dentops.examTimer.v4";
+const LEGACY_STORAGE_KEYS = ["dentops.examTimer.v3", "dentops.examTimer.v2", "dentops.examTimer.v1"] as const;
 
 interface TimerSettings {
   title: string;
   room: string;
-  startMode: "now" | "scheduled";
   startTime: string;
   endTime: string;
-  warnings: number[];
   sound: boolean;
   volume: number;
   theme: DisplayTheme;
-  lateEntryMinutes: number;
-  earlyLeaveMinutes: number;
-  lastLeaveMinutes: number;
-  voice: VoiceSettings;
+  announce: AnnounceSettings;
 }
 
 const DEFAULT_SETTINGS: TimerSettings = {
   title: "",
   room: "",
-  startMode: "scheduled",
   startTime: "",
   endTime: "",
-  warnings: DEFAULT_WARNINGS,
   sound: true,
   volume: 0.85,
   theme: "dark",
-  // KMITL faculty exam rules commonly use 30 / 60; "no leaving in the final 15" follows IB and UK/HK halls.
-  lateEntryMinutes: 30,
-  earlyLeaveMinutes: 60,
-  lastLeaveMinutes: 15,
-  voice: DEFAULT_VOICE,
+  announce: DEFAULT_ANNOUNCE,
 };
 
 interface StoredState {
   settings: TimerSettings;
   session: ExamSession | null;
+  /** Bangkok date the start/finish times were entered for; times from another day are not reused. */
+  savedOn?: string;
 }
 
+const MIN_VOLUME = 0.1;
+
 const ERROR_TEXT: Record<SessionError, Bi> = {
-  "invalid-end": { th: "กรุณาเลือกเวลาเลิกสอบ", en: "Choose the finish time" },
+  "invalid-end": { th: "กรุณาใส่เวลาเลิกสอบ", en: "Enter the finish time" },
   "end-in-past": { th: "เวลาเลิกสอบต้องอยู่หลังเวลาปัจจุบัน", en: "The finish time must be later than now" },
-  "invalid-start": { th: "กรุณาเลือกเวลาเริ่มสอบ", en: "Choose the start time" },
+  "invalid-start": { th: "กรุณาใส่เวลาเริ่มสอบ หรือกด “เริ่มสอบเดี๋ยวนี้”", en: "Enter the start time, or press “Start now”" },
   "start-after-end": { th: "เวลาเริ่มสอบต้องอยู่ก่อนเวลาเลิกสอบ", en: "The start time must be before the finish time" },
 };
 
@@ -128,27 +88,35 @@ function isValidSession(value: unknown): value is ExamSession {
   );
 }
 
-function readStored(): StoredState | null {
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** Settings saved by earlier versions: keep the exam details and the chosen voice, start the sound options fresh. */
+function legacyAnnounce(raw: Record<string, unknown>): AnnounceSettings {
+  const voice = (raw.voice ?? {}) as { thVoice?: unknown; enabled?: unknown };
+  const warnings = Array.isArray(raw.warnings) ? (raw.warnings as unknown[]) : null;
+  // A room that had switched speech off keeps it off.
+  const fiveMinutes = voice.enabled !== false && (warnings ? warnings.includes(5) : true);
+  return normalizeAnnounce({ fiveMinutes, voiceUri: text(voice.thVoice) });
+}
+
+function readStored(today: string): StoredState | null {
   try {
-    const current = window.localStorage.getItem(STORAGE_KEY);
-    const legacyKey = current === null ? LEGACY_STORAGE_KEYS.find((key) => window.localStorage.getItem(key) !== null) : undefined;
-    const raw = current ?? (legacyKey ? window.localStorage.getItem(legacyKey) : null);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredState>;
-    const settings: TimerSettings = { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}), voice: normalizeVoice(parsed.settings?.voice) };
-    const valid = new Set<number>(WARNING_MINUTES);
-    settings.warnings = Array.isArray(settings.warnings) ? settings.warnings.filter((m) => valid.has(m)) : DEFAULT_WARNINGS;
-    if (legacyKey) {
-      // v1 defaulted to "start now", which put the button press time on screen instead of the exam's real start.
-      if (legacyKey.endsWith("v1")) settings.startMode = "scheduled";
-      // The old default (30/15/5) predates the 1-hour checkpoint.
-      if ([...settings.warnings].sort().join() === "15,30,5") settings.warnings = DEFAULT_WARNINGS;
-      // Old untouched room-rule defaults (45 / none) move to the sourced defaults.
-      if (settings.earlyLeaveMinutes === 45 && settings.lastLeaveMinutes === 0) {
-        settings.earlyLeaveMinutes = DEFAULT_SETTINGS.earlyLeaveMinutes;
-        settings.lastLeaveMinutes = DEFAULT_SETTINGS.lastLeaveMinutes;
-      }
-    }
+    const key = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS].find((k) => window.localStorage.getItem(k) !== null);
+    if (!key) return null;
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "{}") as { settings?: Record<string, unknown>; session?: unknown; savedOn?: unknown };
+    const raw = parsed.settings ?? {};
+    // Times typed for another day (or by an older version, which also kept a stale "start now" time) are dropped.
+    const sameDay = key === STORAGE_KEY && parsed.savedOn === today;
+    const settings: TimerSettings = {
+      title: text(raw.title),
+      room: text(raw.room),
+      startTime: sameDay ? text(raw.startTime) : "",
+      endTime: sameDay ? text(raw.endTime) : "",
+      sound: typeof raw.sound === "boolean" ? raw.sound : true,
+      volume: typeof raw.volume === "number" && raw.volume >= MIN_VOLUME && raw.volume <= 1 ? raw.volume : DEFAULT_SETTINGS.volume,
+      theme: raw.theme === "light" ? "light" : "dark",
+      announce: key === STORAGE_KEY ? normalizeAnnounce(raw.announce) : legacyAnnounce(raw),
+    };
     return { settings, session: isValidSession(parsed.session) ? parsed.session : null };
   } catch {
     return null;
@@ -163,56 +131,24 @@ function writeStored(state: StoredState): void {
   }
 }
 
-function hhmm(ms: number): string {
-  return formatClock(ms);
-}
+const hhmm = (ms: number) => formatClock(ms);
 
-/** Round start times around now (from `before` steps ago), for quick-pick chips — a start in the past means "already running". */
-function startTimesAround(now: number, stepMinutes: number, before: number, after: number): string[] {
-  const step = stepMinutes * 60_000;
-  const base = Math.floor(now / step) * step;
-  const out: string[] = [];
-  for (let i = -before; i <= after; i += 1) {
-    const candidate = base + i * step;
-    if (new Date(candidate).getDate() === new Date(now).getDate()) out.push(hhmm(candidate));
-  }
-  return out;
-}
-
-/** The quarter hour nearest to now — a sensible first guess for the scheduled start. */
+/** The quarter hour nearest to now — a sensible first guess for the start time. */
 function nearestQuarter(now: number): string {
   const step = 15 * 60_000;
   return hhmm(Math.round(now / step) * step);
 }
 
-/** Upcoming round times (every `stepMinutes`) after `now`, for quick-pick chips. */
-function upcomingTimes(now: number, stepMinutes: number, count: number, minLeadMinutes = 0): string[] {
-  const step = stepMinutes * 60_000;
-  const first = Math.ceil((now + minLeadMinutes * 60_000 + 1) / step) * step;
-  const out: string[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const candidate = first + i * step;
-    // Stay within today.
-    if (new Date(candidate).getDate() !== new Date(now).getDate()) break;
-    out.push(hhmm(candidate));
-  }
-  return out;
-}
-
 type WakeLockSentinelLike = { release: () => Promise<void> };
-
-type SetupTab = "time" | "voice" | "display";
 
 export function ExamTimer() {
   const t = useT();
-  const locale = t.locale;
+  const tRef = useRef(t);
+  tRef.current = t;
   const clock = useServerClock();
   const announcer = useAnnouncer();
   const announceRef = useRef(announcer.announce);
   announceRef.current = announcer.announce;
-  const tRef = useRef(t);
-  tRef.current = t;
-  const [tab, setTab] = useState<SetupTab>("time");
   const offsetRef = useRef(0);
   offsetRef.current = clock.offset;
   const getNow = useCallback(() => Date.now() + offsetRef.current, []);
@@ -229,6 +165,8 @@ export function ExamTimer() {
 
   const displayRef = useRef<HTMLDivElement>(null);
   const prevNowRef = useRef<number>(0);
+  /** Moments already signalled ("m5@<session>@<end>") — a clock stepping backwards must not repeat them. */
+  const firedRef = useRef(new Set<string>());
   const sessionRef = useRef<ExamSession | null>(null);
   const settingsRef = useRef<TimerSettings>(DEFAULT_SETTINGS);
   sessionRef.current = session;
@@ -236,81 +174,48 @@ export function ExamTimer() {
 
   // ── Restore from storage once on mount ───────────────────────────────────
   useEffect(() => {
-    const stored = readStored();
     const current = Date.now();
+    const stored = readStored(todayInBangkok(new Date(current)));
     if (stored) {
       setSettings(stored.settings.startTime ? stored.settings : { ...stored.settings, startTime: nearestQuarter(current) });
       // Keep a finished session on screen for 15 minutes after it ended, then drop it.
       if (stored.session && current - stored.session.endAt < 15 * 60_000) setSession(stored.session);
+    } else {
+      setSettings((s) => ({ ...s, startTime: nearestQuarter(current) }));
     }
-    else setSettings((s) => ({ ...s, startTime: nearestQuarter(current) }));
     prevNowRef.current = current;
     setNow(current);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (hydrated) writeStored({ settings, session });
+    if (hydrated) writeStored({ settings, session, savedOn: todayInBangkok() });
   }, [hydrated, settings, session]);
 
+  // Muting silences everything at once, including a chime or bell already ringing.
   useEffect(() => {
-    setVolume(settings.volume);
-  }, [settings.volume, audioReady]);
+    setVolume(settings.sound ? settings.volume : 0);
+  }, [settings.sound, settings.volume, audioReady]);
+
+  const { silence } = announcer;
+  useEffect(() => {
+    if (!settings.sound) silence({ keepCaption: true });
+  }, [settings.sound, silence]);
 
   const play = useCallback((kind: ExamSound) => {
     if (!settingsRef.current.sound) return;
-    if (playSound(kind) === 0) setAudioReady(isAudioReady());
+    // Wake the audio engine first: after a reload the browser may have suspended it.
+    void unlockAudio().then((ok) => {
+      if (!ok || playSound(kind) === 0) setAudioReady(false);
+    });
   }, []);
 
-  const contextFor = useCallback(
-    (active: ExamSession | null, addedMinutes?: number): AnnouncementContext => {
-      const s = settingsRef.current;
-      const current = getNow();
-      return {
-        startAt: active?.startAt ?? current,
-        endAt: active?.endAt ?? current + 3 * 3_600_000,
-        now: current,
-        title: s.title,
-        room: s.room,
-        addedMinutes,
-      };
-    },
-    [getNow],
-  );
-
-  /** Chime + speech + caption for a request, following the current settings. */
-  const fire = useCallback(
-    (request: AnnouncementRequest, active: ExamSession | null, addedMinutes?: number) => {
-      const s = settingsRef.current;
-      void announceRef.current(request, { voice: s.voice, sound: s.sound, volume: s.volume, context: contextFor(active, addedMinutes), chime: true });
-      if (s.sound && !isAudioReady()) setAudioReady(false);
-    },
-    [contextFor],
-  );
-
-  /** Moments reached on this tick: one toast for the operator, one combined announcement for the room. */
-  const notify = useCallback(
-    (ids: AnnouncementId[], active: ExamSession) => {
-      const s = settingsRef.current;
-      const tr = tRef.current;
-      const spoken = ids.filter((id) => isMinuteId(id) || s.voice.moments[id]);
-      if (spoken.length) fire({ ids: spoken }, active);
-      else if (ids.includes("end")) play("end");
-      else if (ids.includes("start")) play("start");
-      const end = hhmm(active.endAt);
-      for (const id of ids) {
-        if (id === "start") toast.success(tr("เริ่มสอบแล้ว", "Exam started"), { description: tr(`เลิกสอบเวลา ${end} น.`, `Finishes at ${end}`) });
-        else if (id === "end") toast.error(tr("หมดเวลาสอบ", "Time is up"), { description: tr("กรุณาวางปากกา", "Pens down") });
-        else if (isMinuteId(id)) {
-          const minutes = Number(id.slice(1));
-          toast.warning(minutes === 60 ? tr("เหลือเวลาอีก 1 ชั่วโมง", "1 hour remaining") : tr(`เหลือเวลาอีก ${minutes} นาที`, `${minutes} minutes remaining`));
-        } else if (spoken.includes(id)) {
-          toast.info(tr(ANNOUNCEMENT_LABELS[id]));
-        }
-      }
-    },
-    [fire, play],
-  );
+  /** True the first time a moment is reached for this session and finish time. */
+  const firstTime = useCallback((key: string) => {
+    if (firedRef.current.has(key)) return false;
+    firedRef.current.add(key);
+    return true;
+  }, []);
 
   // ── Tick: derive everything from the clock; fire events on transitions ──
   useEffect(() => {
@@ -322,17 +227,23 @@ export function ExamTimer() {
       // After sleep or a long freeze, don't replay moments that are already stale.
       if (active && current > prev && current - prev < 90_000) {
         const s = settingsRef.current;
-        const ids: AnnouncementId[] = [];
-        ids.push(...crossedMoments(active, s, prev, current).filter((id) => s.voice.moments[id]));
-        if (didStart(active, prev, current)) ids.push("start");
-        const crossed = crossedThresholds(active, prev, current, s.warnings);
-        if (crossed.length > 0) {
-          // A throttled tab can cross two checkpoints at once; announce only the latest.
-          const id = announcementForMinutes(Math.min(...crossed));
-          if (id) ids.push(id);
+        const tr = tRef.current;
+        if (didStart(active, prev, current) && firstTime(`start@${active.createdAt}@${active.startAt}`)) {
+          play("start");
+          toast.success(tr("เริ่มสอบแล้ว", "Exam started"), { description: tr(`เลิกสอบเวลา ${hhmm(active.endAt)} น.`, `Finishes at ${hhmm(active.endAt)}`) });
         }
-        if (didEnd(active, prev, current)) ids.push("end");
-        if (ids.length) notify(ids, active);
+        // An extension moves the finish time, so the warning can play again for the new finish — on purpose.
+        if (crossedThresholds(active, prev, current, [ANNOUNCE_AT_MINUTES]).length > 0 && firstTime(`m5@${active.createdAt}@${active.endAt}`)) {
+          toast.warning(tr("เหลือเวลาสอบอีก 5 นาที", "5 minutes remaining"));
+          if (s.announce.fiveMinutes) {
+            void announceRef.current({ settings: s.announce, volume: s.volume, sound: s.sound, caption: true });
+            if (s.sound && !isAudioReady()) setAudioReady(false);
+          }
+        }
+        if (didEnd(active, prev, current) && firstTime(`end@${active.createdAt}@${active.endAt}`)) {
+          play("end");
+          toast.error(tr("หมดเวลาสอบ", "Time is up"), { description: tr("กรุณาวางปากกา", "Pens down") });
+        }
       }
       prevNowRef.current = current;
       setNow(current);
@@ -340,7 +251,7 @@ export function ExamTimer() {
     tick();
     const id = window.setInterval(tick, 200);
     return () => window.clearInterval(id);
-  }, [hydrated, getNow, notify]);
+  }, [hydrated, getNow, play, firstTime]);
 
   // When the clock offset changes, re-baseline so the jump itself never fires an event.
   useEffect(() => {
@@ -356,7 +267,27 @@ export function ExamTimer() {
 
   const fullscreen = isFullscreen || pseudoFullscreen;
 
+  const ensureAudio = useCallback(async () => {
+    primeSpeech();
+    const ok = await unlockAudio();
+    setVolume(settingsRef.current.sound ? settingsRef.current.volume : 0);
+    setAudioReady(ok);
+    return ok;
+  }, []);
+
+  // Any click or key on the page counts as permission to play sound, so a reloaded timer still rings.
+  useEffect(() => {
+    const unlock = () => void ensureAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [ensureAudio]);
+
   const enterFullscreen = useCallback(async () => {
+    void ensureAudio();
     const el = displayRef.current;
     if (!el) return;
     if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled) {
@@ -368,7 +299,7 @@ export function ExamTimer() {
       }
     }
     setPseudoFullscreen(true);
-  }, []);
+  }, [ensureAudio]);
 
   const exitFullscreen = useCallback(async () => {
     setPseudoFullscreen(false);
@@ -443,80 +374,46 @@ export function ExamTimer() {
     setError(null);
   };
 
-  const ensureAudio = useCallback(async () => {
-    const ok = await unlockAudio();
-    setVolume(settingsRef.current.volume);
-    setAudioReady(ok);
-    return ok;
-  }, []);
-
-  const begin = (newSession: ExamSession) => {
-    prevNowRef.current = getNow();
-    setSession(newSession);
-    setError(null);
-    const current = getNow();
-    if (phaseAt(newSession, current) === "running") {
-      // "You may now begin" only makes sense at the actual start, not when reopening a running exam.
-      if (current - newSession.startAt < 90_000) notify(["start"], newSession);
-      else toast.success(t("จับเวลาต่อจากเวลาจริงแล้ว", "Timer joined the running exam"), { description: t(`เลิกสอบเวลา ${hhmm(newSession.endAt)} น.`, `Finishes at ${hhmm(newSession.endAt)}`) });
-    } else {
-      const at = hhmm(newSession.startAt);
-      toast.info(t(`ตั้งเวลาแล้ว — จะเริ่มสอบอัตโนมัติเวลา ${at} น.`, `Scheduled — the exam starts automatically at ${at}`));
+  /** `startTime: null` = the exam starts now (the "เริ่มสอบเดี๋ยวนี้" button). */
+  const begin = async (startTime: string | null) => {
+    void ensureAudio();
+    if (startTime === "") {
+      setError(t(ERROR_TEXT["invalid-start"]));
+      return;
     }
-  };
-
-  /** During a running exam the room hears it too — ask first. */
-  const confirmLive = () =>
-    !sessionRef.current ||
-    phaseAt(sessionRef.current, getNow()) !== "running" ||
-    window.confirm(t("การสอบกำลังดำเนินอยู่ ประกาศนี้จะดังในห้องสอบทันที ต้องการประกาศหรือไม่?", "An exam is running — the whole room will hear this now. Announce it?"));
-
-  const previewAnnouncement = async (id: AnnouncementId) => {
-    if (!confirmLive()) return;
-    await ensureAudio();
-    announcer.clearBlocked();
-    fire({ ids: [id] }, sessionRef.current ?? preview, id === "extend" ? 5 : undefined);
-  };
-
-  const customAnnouncement = async (text: Bi) => {
-    if (!confirmLive()) return;
-    await ensureAudio();
-    announcer.clearBlocked();
-    fire({ custom: { th: text.th.trim(), en: text.en.trim() } }, sessionRef.current);
-  };
-
-  const start = async () => {
-    await ensureAudio();
-    const result = createSession(getNow(), {
-      endTime: settings.endTime,
-      startTime: settings.startMode === "scheduled" ? settings.startTime : null,
-    });
+    const current = getNow();
+    const result = createSession(current, { endTime: settings.endTime, startTime });
     if (!result.ok) {
       setError(t(ERROR_TEXT[result.error]));
       return;
     }
-    begin(result.session);
-  };
-
-  const startDuration = async (minutes: number) => {
-    await ensureAudio();
-    const current = getNow();
-    if (settings.startMode === "scheduled") {
-      const startAt = todayAt(current, settings.startTime);
-      if (startAt === null) {
-        setError(t(ERROR_TEXT["invalid-start"]));
-        return;
+    const next = result.session;
+    // A new session replaces the old one completely, including its announcement on screen.
+    if (sessionRef.current) silence();
+    prevNowRef.current = current;
+    sessionRef.current = next;
+    setSession(next);
+    setError(null);
+    if (startTime === null) update("startTime", hhmm(next.startAt));
+    if (phaseAt(next, current) === "running") {
+      // The start chime only makes sense at the actual start, not when joining an exam already under way.
+      if (current - next.startAt < 90_000) {
+        play("start");
+        toast.success(t("เริ่มจับเวลาแล้ว", "Timer started"), { description: t(`เลิกสอบเวลา ${hhmm(next.endAt)} น.`, `Finishes at ${hhmm(next.endAt)}`) });
+      } else {
+        toast.success(t("จับเวลาต่อจากเวลาจริงแล้ว", "Timer joined the running exam"), {
+          description: t(`เลิกสอบเวลา ${hhmm(next.endAt)} น.`, `Finishes at ${hhmm(next.endAt)}`),
+        });
       }
-      update("endTime", hhmm(startAt + minutes * 60_000));
-      return;
+    } else {
+      const at = hhmm(next.startAt);
+      toast.info(t(`ตั้งเวลาแล้ว — จะเริ่มสอบอัตโนมัติเวลา ${at} น.`, `Scheduled — the exam starts automatically at ${at}`));
     }
-    begin(createSessionFromDuration(current, minutes));
-    update("endTime", hhmm(current + minutes * 60_000));
   };
 
   const stop = () => {
     setSession(null);
-    announcer.silence();
+    silence();
     toast(t("หยุดจับเวลาแล้ว", "Timer stopped"));
   };
 
@@ -527,7 +424,22 @@ export function ExamTimer() {
     sessionRef.current = next;
     setSession(next);
     toast.success(t(`ขยายเวลาสอบ +${minutes} นาที`, `Extended by ${minutes} minutes`));
-    if (settingsRef.current.voice.moments.extend && phaseAt(next, getNow()) === "running") fire({ ids: ["extend"] }, next, minutes);
+  };
+
+  /** During a running exam the room hears a test too — ask first. */
+  const confirmLive = () =>
+    phase !== "running" ||
+    window.confirm(t("การสอบกำลังดำเนินอยู่ เสียงทดลองจะดังในห้องสอบทันที ต้องการเล่นหรือไม่?", "An exam is running — the whole room will hear this now. Play it?"));
+
+  const testAnnouncement = async () => {
+    if (!confirmLive()) return;
+    await ensureAudio();
+    void announcer.announce({ settings: settings.announce, volume: settings.volume, sound: true, caption: phase === "running" });
+  };
+
+  const testChime = async (style: ChimeStyle) => {
+    if (!confirmLive()) return;
+    if (!(await ensureAudio()) || playChime(style) === 0) toast.error(t("เครื่องนี้เล่นเสียงไม่ได้", "This browser cannot play sound"));
   };
 
   const toggleSound = () => update("sound", !settings.sound);
@@ -552,15 +464,6 @@ export function ExamTimer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleFullscreen, pseudoFullscreen]);
 
-  // ── Derived UI data ──────────────────────────────────────────────────────
-  const endChips = useMemo(() => (now ? upcomingTimes(now, 30, 8, 10) : []), [now]);
-  const startChips = useMemo(() => (now ? startTimesAround(now, 15, 2, 4) : []), [now]);
-  const rules: RoomRules = {
-    lateEntryMinutes: settings.lateEntryMinutes,
-    earlyLeaveMinutes: settings.earlyLeaveMinutes,
-    lastLeaveMinutes: settings.lastLeaveMinutes,
-  };
-
   // Today's exams from the invigilation sheet — one tap fills the title, room and official times.
   const { invigilation } = useScheduleBundle();
   const today = now ? todayInBangkok(new Date(now)) : "";
@@ -571,25 +474,15 @@ export function ExamTimer() {
       .sort((a, b) => a.start!.localeCompare(b.start!));
   }, [invigilation, today]);
   const pickExam = (entry: (typeof todaysExams)[number]) => {
-    setSettings((s) => ({
-      ...s,
-      title: entry.title,
-      room: entry.rooms.join(" · "),
-      startMode: "scheduled",
-      startTime: entry.start!,
-      endTime: entry.end!,
-    }));
+    setSettings((s) => ({ ...s, title: entry.title, room: entry.rooms.join(" · "), startTime: entry.start!, endTime: entry.end! }));
     setError(null);
   };
 
   const preview = useMemo(() => {
     if (!now || !settings.endTime) return null;
-    const result = createSession(now, {
-      endTime: settings.endTime,
-      startTime: settings.startMode === "scheduled" ? settings.startTime : null,
-    });
+    const result = createSession(now, { endTime: settings.endTime, startTime: settings.startTime || null });
     return result.ok ? result.session : null;
-  }, [now, settings.endTime, settings.startMode, settings.startTime]);
+  }, [now, settings.endTime, settings.startTime]);
 
   const running = session !== null && phase !== "ended";
 
@@ -643,20 +536,16 @@ export function ExamTimer() {
             room={settings.room}
             theme={settings.theme}
             fullscreen={fullscreen}
-            rules={rules}
             caption={announcer.caption}
           >
             {hydrated && fullscreen ? controlBar : null}
-            {session && settings.sound && (!audioReady || announcer.blocked) && phase !== "ended" ? (
+            {session && settings.sound && !audioReady && phase !== "ended" ? (
               <button
                 type="button"
-                onClick={() => {
-                  announcer.clearBlocked();
-                  void ensureAudio();
-                }}
+                onClick={() => void ensureAudio()}
                 className="absolute bottom-[9cqw] left-1/2 z-10 flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950 shadow-lg"
               >
-                <BellRing className="size-4" aria-hidden /> {t("แตะเพื่อเปิดเสียงแจ้งเตือน", "Tap to enable sound")}
+                <BellRing className="size-4" aria-hidden /> {t("แตะเพื่อเปิดเสียง", "Tap to enable sound")}
               </button>
             ) : null}
           </TimerDisplay>
@@ -679,6 +568,15 @@ export function ExamTimer() {
               </Button>
             </>
           ) : null}
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => update("theme", settings.theme === "dark" ? "light" : "dark")}
+            aria-label={t("สลับจอมืด/สว่าง", "Switch dark/light screen")}
+          >
+            {settings.theme === "dark" ? <Sun aria-hidden /> : <Moon aria-hidden />}
+            {settings.theme === "dark" ? t("จอสว่าง", "Light screen") : t("จอมืด", "Dark screen")}
+          </Button>
           <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
             <span className="hidden items-center gap-1.5 sm:flex">
               <Kbd>F</Kbd> {t("เต็มจอ", "full screen")} <Kbd>M</Kbd> {t("ปิดเสียง", "mute")}
@@ -686,7 +584,6 @@ export function ExamTimer() {
             {clock.status === "synced" ? (
               <Badge tone="success">
                 <Wifi aria-hidden /> {t("เวลาตรงกับเซิร์ฟเวอร์", "Synced with server time")}
-                {clock.offset !== 0 ? t(` (ปรับ ${(clock.offset / 1000).toFixed(1)} วิ)`, ` (adjusted ${(clock.offset / 1000).toFixed(1)} s)`) : ""}
               </Badge>
             ) : clock.status === "local" ? (
               <Badge tone="warning">
@@ -700,62 +597,48 @@ export function ExamTimer() {
       </div>
 
       {/* ── Setup ── */}
-      <Card className="h-fit">
-        <CardHeader>
-          <div>
-            <CardTitle>{t("ตั้งเวลาสอบ", "Exam setup")}</CardTitle>
-            <CardDescription>
-              {t("ใส่เวลาสอบตามตาราง เช่น 09:00–12:00 — จอแสดงเวลาสอบจริงและระยะเวลารวม", "Enter the scheduled time, e.g. 09:00–12:00 — the screen shows the official window and its length")}
-            </CardDescription>
-          </div>
-          {running ? <Badge tone="success">{t("กำลังจับเวลา", "Running")}</Badge> : null}
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <Segmented<SetupTab>
-            ariaLabel={t("หมวดการตั้งค่า", "Settings section")}
-            value={tab}
-            onChange={setTab}
-            className="w-full"
-            options={[
-              { value: "time", label: t("เวลาสอบ", "Time") },
-              { value: "voice", label: t("ประกาศเสียง", "Announcements") },
-              { value: "display", label: t("เสียงและจอ", "Sound & screen") },
-            ]}
-          />
-          {tab === "time" ? (
-          <>
-          {todaysExams.length ? (
-            <div className="flex flex-col gap-1.5">
-              <Label className="flex items-center gap-1.5">
-                <CalendarClock className="size-3.5 text-brand-600" aria-hidden /> {t("สอบวันนี้ (จากตารางคุมสอบ)", "Today's exams (from the invigilation sheet)")}
-              </Label>
-              <ul className="flex flex-col gap-1">
-                {todaysExams.map((entry) => {
-                  const active = settings.title === entry.title && settings.startTime === entry.start && settings.endTime === entry.end;
-                  return (
-                    <li key={entry.id}>
-                      <button
-                        type="button"
-                        onClick={() => pickExam(entry)}
-                        className={cn(
-                          "flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left text-xs transition-colors",
-                          active ? "border-brand-600 bg-brand-50" : "border-border hover:border-brand-300 hover:bg-brand-50/50",
-                        )}
-                      >
-                        <span className="shrink-0 font-[family-name:var(--font-latin)] font-semibold tabular">
-                          {entry.start}–{entry.end}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">{entry.title}</span>
-                        {entry.rooms.length ? <span className="shrink-0 text-muted-foreground">{entry.rooms.join(", ")}</span> : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+      <div className="flex flex-col gap-5">
+        <Card className="h-fit">
+          <CardHeader>
+            <div>
+              <CardTitle>{t("ตั้งเวลาสอบ", "Exam time")}</CardTitle>
+              <CardDescription>{t("ใส่เวลาตามตารางสอบ แล้วกดเริ่ม", "Enter the scheduled times, then press start")}</CardDescription>
             </div>
-          ) : null}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("ชื่อการสอบ / รายวิชา", "Exam / course")} htmlFor="timer-title" className="col-span-2">
+            {running ? <Badge tone="success">{t("กำลังจับเวลา", "Running")}</Badge> : null}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {todaysExams.length ? (
+              <div className="flex flex-col gap-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <CalendarClock className="size-3.5 text-brand-600" aria-hidden /> {t("สอบวันนี้ (กดเพื่อเติมให้)", "Today's exams (tap to fill in)")}
+                </Label>
+                <ul className="flex flex-col gap-1">
+                  {todaysExams.map((entry) => {
+                    const active = settings.title === entry.title && settings.startTime === entry.start && settings.endTime === entry.end;
+                    return (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          onClick={() => pickExam(entry)}
+                          className={cn(
+                            "flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left text-xs transition-colors",
+                            active ? "border-brand-600 bg-brand-50" : "border-border hover:border-brand-300 hover:bg-brand-50/50",
+                          )}
+                        >
+                          <span className="shrink-0 font-[family-name:var(--font-latin)] font-semibold tabular">
+                            {entry.start}–{entry.end}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+                          {entry.rooms.length ? <span className="shrink-0 text-muted-foreground">{entry.rooms.join(", ")}</span> : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            <Field label={t("ชื่อการสอบ / รายวิชา", "Exam / course")} htmlFor="timer-title">
               <Input
                 id="timer-title"
                 value={settings.title}
@@ -764,7 +647,7 @@ export function ExamTimer() {
                 maxLength={120}
               />
             </Field>
-            <Field label={t("ห้องสอบ", "Room")} htmlFor="timer-room" className="col-span-2">
+            <Field label={t("ห้องสอบ", "Room")} htmlFor="timer-room">
               <Input
                 id="timer-room"
                 value={settings.room}
@@ -773,76 +656,40 @@ export function ExamTimer() {
                 maxLength={80}
               />
             </Field>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("เริ่มสอบ", "Start")}</Label>
-            <Segmented
-              ariaLabel={t("เวลาเริ่มสอบ", "Start time")}
-              value={settings.startMode}
-              onChange={(v) => update("startMode", v)}
-              options={[
-                { value: "scheduled", label: t("ตามเวลาสอบจริง", "Scheduled time") },
-                { value: "now", label: t("เริ่มทันที", "Start now") },
-              ]}
-            />
-            {settings.startMode === "scheduled" ? (
-              <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="timer-start">{t("เริ่มสอบ", "Start")}</Label>
                 <Input
+                  id="timer-start"
                   type="time"
-                  aria-label={t("เวลาเริ่มสอบ", "Start time")}
                   value={settings.startTime}
                   onChange={(e) => update("startTime", e.target.value)}
                   className="h-10 text-base tabular"
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {startChips.map((time) => (
-                    <Chip key={time} active={settings.startTime === time} onClick={() => update("startTime", time)}>
-                      {time}
-                    </Chip>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {t(
-                    "ใส่เวลาเริ่มตามตารางสอบ — ถ้ายังไม่ถึงเวลา ระบบนับถอยหลังแล้วเริ่มให้อัตโนมัติ ถ้าเลยมาแล้วจะนับต่อจากเวลาจริง (เช่น สอบ 09:00–12:00 เปิดจอ 09:05 ก็ยังแสดง “รวม 3 ชั่วโมง”)",
-                    "Enter the scheduled start — before it, the screen counts down and starts by itself; after it, the timer joins the running exam (09:00–12:00 opened at 09:05 still shows “3 hours”).",
-                  )}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => void begin(null)}
+                  className="w-fit cursor-pointer text-xs font-medium text-brand-700 hover:underline"
+                >
+                  {t("เริ่มสอบเดี๋ยวนี้", "Start now")}
+                </button>
               </div>
-            ) : null}
-          </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="timer-end">
+                  {t("เลิกสอบ", "Finish")} <span className="text-danger">*</span>
+                </Label>
+                <Input
+                  id="timer-end"
+                  type="time"
+                  value={settings.endTime}
+                  onChange={(e) => update("endTime", e.target.value)}
+                  aria-invalid={error !== null}
+                  className="h-10 text-base tabular"
+                />
+              </div>
+            </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="timer-end">
-              {t("เลิกสอบเวลา", "Finish time")} <span className="text-danger">*</span>
-            </Label>
-            <Input
-              id="timer-end"
-              type="time"
-              value={settings.endTime}
-              onChange={(e) => update("endTime", e.target.value)}
-              aria-invalid={error !== null}
-              className="h-10 text-base tabular"
-            />
-            <div className="flex flex-wrap gap-1.5" aria-label={t("เลือกเวลาเลิกสอบอย่างรวดเร็ว", "Quick finish times")}>
-              {endChips.map((time) => (
-                <Chip key={time} active={settings.endTime === time} onClick={() => update("endTime", time)}>
-                  {time}
-                </Chip>
-              ))}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">
-                {settings.startMode === "now"
-                  ? t("หรือเริ่มทันที สอบนาน:", "Or start now for:")
-                  : t("หรือสอบนาน (นับจากเวลาเริ่ม):", "Or a length from the start:")}
-              </span>
-              {DURATION_CHIPS.map((m) => (
-                <Chip key={m} onClick={() => void startDuration(m)}>
-                  {formatDuration(m * 60_000, locale)}
-                </Chip>
-              ))}
-            </div>
             {preview ? (
               <p className="flex items-center gap-1.5 rounded-[var(--radius-control)] bg-brand-50 px-2.5 py-2 text-xs text-brand-900">
                 <Clock3 className="size-3.5 shrink-0" aria-hidden />
@@ -850,7 +697,6 @@ export function ExamTimer() {
                   `เวลาสอบ ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} น. · รวม ${formatDuration(preview.endAt - preview.startAt, "th")}`,
                   `Exam ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} · ${formatDuration(preview.endAt - preview.startAt, "en")}`,
                 )}
-                {preview.startAt < now ? t(` · เหลือ ${formatDuration(preview.endAt - now, "th")}`, ` · ${formatDuration(preview.endAt - now, "en")} left`) : ""}
               </p>
             ) : null}
             {error ? (
@@ -858,178 +704,38 @@ export function ExamTimer() {
                 {error}
               </p>
             ) : null}
-          </div>
 
-          <Button size="lg" onClick={() => void start()} className="h-11 text-sm">
-            {session ? <RotateCcw aria-hidden /> : <Play aria-hidden />}
-            {session ? t("ตั้งเวลาใหม่", "Reset timer") : t("เริ่มจับเวลา", "Start timer")}
-          </Button>
+            <Button size="lg" onClick={() => void begin(settings.startTime)} className="h-11 text-sm">
+              {session ? <RotateCcw aria-hidden /> : <Play aria-hidden />}
+              {session ? t("ตั้งเวลาใหม่", "Reset timer") : t("เริ่มจับเวลา", "Start timer")}
+            </Button>
+          </CardContent>
+        </Card>
 
-          <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <div>
-              <Label>{t("กติกาห้องสอบ (แสดงบนจอ)", "Exam-room rules (shown on screen)")}</Label>
-              <p className="text-[11px] text-muted-foreground">
-                {t("ตามระเบียบการสอบของคณะ/สถาบัน — ปรับได้ตามแต่ละวิชา", "Follow the faculty's exam regulations — adjust per course")}
-              </p>
-            </div>
-            <RuleChips
-              label={t("เข้าห้องสอบได้ไม่เกิน (หลังเริ่มสอบ)", "Late entry allowed for (after the start)")}
-              options={LATE_ENTRY_OPTIONS}
-              value={settings.lateEntryMinutes}
-              onChange={(v) => update("lateEntryMinutes", v)}
-            />
-            <RuleChips
-              label={t("ออกจากห้องสอบได้หลังเริ่มสอบ", "Earliest leaving (after the start)")}
-              options={EARLY_LEAVE_OPTIONS}
-              value={settings.earlyLeaveMinutes}
-              onChange={(v) => update("earlyLeaveMinutes", v)}
-            />
-            <RuleChips
-              label={t("งดออกจากห้องช่วงท้าย", "No leaving in the final")}
-              options={LAST_LEAVE_OPTIONS}
-              value={settings.lastLeaveMinutes}
-              onChange={(v) => update("lastLeaveMinutes", v)}
-            />
-          </div>
-          </>
-          ) : null}
-
-          {tab === "voice" ? (
-            <VoicePanel
-              voice={settings.voice}
-              onVoiceChange={(voice) => update("voice", voice)}
-              warnings={settings.warnings}
-              onWarningsChange={(warnings) => update("warnings", warnings)}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle>{t("เสียง", "Sound")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SoundSettings
+              announce={settings.announce}
+              onAnnounceChange={(announce) => update("announce", announce)}
+              volume={settings.volume}
+              onVolumeChange={(volume) => update("volume", volume)}
+              sound={settings.sound}
+              onSoundChange={(sound) => update("sound", sound)}
               supported={announcer.supported}
-              thVoices={announcer.thVoices}
-              enVoices={announcer.enVoices}
+              voicesLoaded={announcer.voicesLoaded}
+              voices={announcer.voices}
               speaking={announcer.speaking}
-              missingLanguages={announcer.missingLanguages(settings.voice.language)}
-              log={announcer.log}
-              onPreview={(id) => void previewAnnouncement(id)}
-              onCustom={(text) => void customAnnouncement(text)}
-              onStop={announcer.silence}
+              result={announcer.result}
+              onTest={() => void testAnnouncement()}
+              onTestChime={(style) => void testChime(style)}
+              onStop={() => silence()}
             />
-          ) : null}
-
-          {tab === "display" ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="timer-sound">{t("เสียงทั้งหมด (กริ่งและเสียงพูด)", "All sound (chimes and voice)")}</Label>
-              <Switch id="timer-sound" checked={settings.sound} onCheckedChange={(v) => update("sound", v)} />
-            </div>
-            <div className="flex items-center gap-3">
-              <VolumeX className="size-4 text-neutral-400" aria-hidden />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={settings.volume}
-                onChange={(e) => update("volume", Number(e.target.value))}
-                aria-label={t("ระดับเสียง", "Volume")}
-                className="h-1.5 flex-1 cursor-pointer accent-brand-600"
-                disabled={!settings.sound}
-              />
-              <Volume2 className="size-4 text-neutral-400" aria-hidden />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <span className="w-full text-[11px] text-muted-foreground">{t("ทดสอบเสียงกริ่ง (ก่อนเริ่มสอบ)", "Test the chimes (before the exam)")}</span>
-              {(
-                [
-                  ["start", t("เริ่มสอบ", "Start")],
-                  ["warning", t("เตือน", "Warning")],
-                  ["end", t("หมดเวลา", "Time up")],
-                ] as const
-              ).map(([kind, label]) => (
-                <Button
-                  key={kind}
-                  variant="secondary"
-                  size="sm"
-                  onClick={async () => {
-                    if (await ensureAudio()) playSound(kind);
-                    else toast.error(t("เบราว์เซอร์นี้ไม่รองรับเสียง", "This browser cannot play sound"));
-                  }}
-                >
-                  <BellRing aria-hidden /> {label}
-                </Button>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <Label>{t("ธีมหน้าจอ", "Screen theme")}</Label>
-              <Segmented
-                ariaLabel={t("ธีมหน้าจอ", "Screen theme")}
-                value={settings.theme}
-                onChange={(v) => update("theme", v)}
-                options={[
-                  {
-                    value: "dark",
-                    label: (
-                      <span className="flex items-center gap-1">
-                        <Moon className="size-3.5" aria-hidden /> {t("มืด", "Dark")}
-                      </span>
-                    ),
-                  },
-                  {
-                    value: "light",
-                    label: (
-                      <span className="flex items-center gap-1">
-                        <Sun className="size-3.5" aria-hidden /> {t("สว่าง", "Light")}
-                      </span>
-                    ),
-                  },
-                ]}
-              />
-            </div>
-          </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Chip({
-  active = false,
-  className,
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "h-7 cursor-pointer rounded-[var(--radius-chip)] border px-2.5 font-[family-name:var(--font-latin)] text-xs font-medium tabular transition-colors outline-none focus-visible:shadow-[var(--shadow-focus)]",
-        active ? "border-brand-600 bg-brand-600 text-white" : "border-border bg-card text-neutral-700 hover:border-brand-300 hover:bg-brand-50",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
-
-function RuleChips({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: readonly number[];
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  const t = useT();
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-full text-[11px] text-muted-foreground">{label}</span>
-      {options.map((m) => (
-        <Chip key={m} active={value === m} aria-pressed={value === m} onClick={() => onChange(m)}>
-          {m === 0 ? t("ไม่กำหนด", "Off") : t(`${m} นาที`, `${m} min`)}
-        </Chip>
-      ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

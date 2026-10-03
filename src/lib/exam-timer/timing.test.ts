@@ -4,13 +4,11 @@ import {
   crossedThresholds,
   didEnd,
   didStart,
-  createSessionFromDuration,
   extensionMs,
   formatClock,
   formatCountdown,
   formatDuration,
   formatDurationThai,
-  roomNotices,
   phaseAt,
   remainingMs,
   splitDuration,
@@ -100,8 +98,6 @@ describe("events", () => {
 });
 
 describe("official exam window", () => {
-  const rules = { lateEntryMinutes: 30, earlyLeaveMinutes: 45, lastLeaveMinutes: 15 };
-
   it("opening the screen late still shows 09:00–12:00 and 3 hours", () => {
     const result = createSession(at("09:05:20"), { startTime: "09:00", endTime: "12:00" });
     if (!result.ok) throw new Error("expected ok");
@@ -111,8 +107,10 @@ describe("official exam window", () => {
     expect(phaseAt(s, at("09:05:20"))).toBe("running");
   });
 
-  it("start-now sessions begin on the whole minute so the length is round", () => {
-    const s = createSessionFromDuration(at("18:59:37"), 60);
+  it("a session started now begins on the whole minute so the length is round", () => {
+    const result = createSession(at("18:59:37"), { startTime: null, endTime: "19:59" });
+    if (!result.ok) throw new Error("expected ok");
+    const s = result.session;
     expect([formatClock(s.startAt), formatClock(s.endAt)]).toEqual(["18:59", "19:59"]);
     expect(formatDurationThai(s.endAt - s.startAt)).toBe("1 ชั่วโมง");
     expect(formatDurationThai(90 * 60_000)).toBe("1 ชั่วโมงครึ่ง");
@@ -126,24 +124,6 @@ describe("official exam window", () => {
     const extended = { ...result.session, endAt: result.session.endAt + 10 * 60_000 };
     expect(extensionMs(extended)).toBe(10 * 60_000);
     expect(extensionMs({ startAt: 0, endAt: 10, createdAt: 0 })).toBe(0);
-  });
-
-  it("words the door rules for the moment", () => {
-    const result = createSession(at("08:50:00"), { startTime: "09:00", endTime: "12:00" });
-    if (!result.ok) throw new Error("expected ok");
-    const s = result.session;
-    const texts = (time: string) => roomNotices(s, at(time), rules).map((n) => `${n.state}:${n.text.th}`);
-    expect(texts("08:55:00")).toEqual([
-      "info:เข้าห้องสอบได้ถึง 09:30 น.",
-      "info:ออกจากห้องสอบได้ตั้งแต่ 09:45 น.",
-      "info:งดออกจากห้อง 15 นาทีสุดท้าย",
-    ]);
-    expect(texts("09:10:00")).toEqual(["open:เข้าห้องสอบได้ถึง 09:30 น.", "closed:ยังออกจากห้องสอบไม่ได้ จนถึง 09:45 น."]);
-    expect(texts("10:00:00")).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "open:ออกจากห้องสอบได้แล้ว"]);
-    expect(texts("11:50:00")).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "closed:15 นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา"]);
-    expect(texts("12:00:00")).toEqual([]);
-    expect(roomNotices(s, at("09:10:00"), { lateEntryMinutes: 0, earlyLeaveMinutes: 0, lastLeaveMinutes: 0 })).toEqual([]);
-    expect(roomNotices(s, at("10:00:00"), rules).map((n) => n.text.en)).toEqual(["Entry closed (09:30)", "You may now leave"]);
   });
 });
 

@@ -147,7 +147,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: bi("นาฬิกาจับเวลาสอบ", "Exam timer"),
         href: "/exam-timer",
         icon: Timer,
-        description: bi("นับถอยหลังบนโปรเจกเตอร์ พร้อมประกาศเสียงสองภาษา", "Projector countdown with bilingual spoken announcements"),
+        description: bi("นับถอยหลังเต็มจอบนโปรเจกเตอร์ พร้อมประกาศเสียงเมื่อเหลือ 5 นาที", "Full-screen projector countdown with a spoken 5-minute warning"),
         status: "ready",
         keywords: ["timer", "countdown", "clock", "announcement", "voice", "จับเวลา", "นาฬิกา", "สอบ", "ประกาศ", "เสียง"],
       },

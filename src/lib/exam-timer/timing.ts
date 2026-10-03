@@ -5,7 +5,7 @@
  */
 
 import { parseTime } from "@/lib/thai";
-import type { Bi, Locale } from "@/lib/i18n/locale";
+import type { Locale } from "@/lib/i18n/locale";
 
 export type TimerPhase = "waiting" | "running" | "ended";
 
@@ -49,64 +49,9 @@ export function createSession(
   return { ok: true, session: { startAt, endAt, createdAt: now, plannedEndAt: endAt } };
 }
 
-/** Starts on the current whole minute so the screen reads e.g. 10:07–11:07 and "1 ชั่วโมง", not 10:07–11:08. */
-export function createSessionFromDuration(now: number, minutes: number): ExamSession {
-  const startAt = Math.floor(now / 60_000) * 60_000;
-  const endAt = startAt + Math.round(minutes * 60_000);
-  return { startAt, endAt, createdAt: now, plannedEndAt: endAt };
-}
-
 /** Minutes added with the extend buttons (0 when none). */
 export function extensionMs(session: ExamSession): number {
   return Math.max(0, session.endAt - (session.plannedEndAt ?? session.endAt));
-}
-
-export interface RoomRules {
-  /** Candidates may enter until this many minutes after the start (0 = no rule). */
-  lateEntryMinutes: number;
-  /** Candidates may leave only after this many minutes (0 = no rule). */
-  earlyLeaveMinutes: number;
-  /** Candidates may not leave in the last N minutes, to keep the end of the exam quiet (0 = no rule). */
-  lastLeaveMinutes: number;
-}
-
-export interface RoomNotice {
-  key: "entry" | "leave" | "last";
-  text: Bi;
-  /** "open" = allowed now, "closed" = not allowed now, "info" = before the exam starts. */
-  state: "open" | "closed" | "info";
-}
-
-/** The door rules invigilators announce, worded for the current moment, in Thai and English. */
-export function roomNotices(session: ExamSession, now: number, rules: RoomRules): RoomNotice[] {
-  const phase = phaseAt(session, now);
-  if (phase === "ended") return [];
-  const notices: RoomNotice[] = [];
-  const total = session.endAt - session.startAt;
-  if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * 60_000 < total) {
-    const until = formatClock(session.startAt + rules.lateEntryMinutes * 60_000);
-    const openText = { th: `เข้าห้องสอบได้ถึง ${until} น.`, en: `Late entry until ${until}` };
-    if (phase === "waiting") notices.push({ key: "entry", state: "info", text: openText });
-    else if (now < session.startAt + rules.lateEntryMinutes * 60_000) notices.push({ key: "entry", state: "open", text: openText });
-    else notices.push({ key: "entry", state: "closed", text: { th: `ปิดรับเข้าห้องสอบแล้ว (${until} น.)`, en: `Entry closed (${until})` } });
-  }
-  const leaveFrom = rules.earlyLeaveMinutes > 0 ? session.startAt + rules.earlyLeaveMinutes * 60_000 : session.startAt;
-  const leaveUntil = rules.lastLeaveMinutes > 0 ? session.endAt - rules.lastLeaveMinutes * 60_000 : session.endAt;
-  if (rules.earlyLeaveMinutes > 0 && leaveFrom < session.endAt) {
-    const from = formatClock(leaveFrom);
-    if (phase === "waiting") notices.push({ key: "leave", state: "info", text: { th: `ออกจากห้องสอบได้ตั้งแต่ ${from} น.`, en: `You may leave from ${from}` } });
-    else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: { th: `ยังออกจากห้องสอบไม่ได้ จนถึง ${from} น.`, en: `No leaving until ${from}` } });
-    else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: { th: "ออกจากห้องสอบได้แล้ว", en: "You may now leave" } });
-  }
-  if (rules.lastLeaveMinutes > 0 && leaveUntil > session.startAt) {
-    const m = rules.lastLeaveMinutes;
-    if (now >= leaveUntil && phase === "running") {
-      notices.push({ key: "last", state: "closed", text: { th: `${m} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา`, en: `Final ${m} minutes — please remain seated` } });
-    } else if (phase === "waiting") {
-      notices.push({ key: "last", state: "info", text: { th: `งดออกจากห้อง ${m} นาทีสุดท้าย`, en: `No leaving in the final ${m} minutes` } });
-    }
-  }
-  return notices;
 }
 
 export function phaseAt(session: ExamSession, now: number): TimerPhase {

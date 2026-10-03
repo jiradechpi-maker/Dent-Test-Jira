@@ -1,228 +1,152 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ANNOUNCEMENT_LABELS,
-  ANNOUNCEMENT_ORDER,
-  DEFAULT_MOMENTS,
-  captionFor,
-  combineScripts,
-  languageOrder,
-  spokenParts,
-  type AnnouncementContext,
-  type AnnouncementId,
-  type MomentId,
-  type VoiceLanguage,
-} from "@/lib/exam-timer/announcements";
-import { playSound, type ExamSound } from "@/lib/exam-timer/sounds";
-import { loadVoices, onVoicesChanged, speak, speechSupported, stopSpeaking, voicesFor, type SpeakStatus } from "@/lib/exam-timer/speech";
+import { announcementText, captionFor, speakableThai } from "@/lib/exam-timer/announcements";
+import { CHIME_STYLES, playChime, unlockAudio, type ChimeStyle } from "@/lib/exam-timer/sounds";
+import { loadVoices, onVoicesChanged, speakThai, speechSupported, stopSpeaking, thaiVoices, type SpeakResult } from "@/lib/exam-timer/speech";
 import type { Bi } from "@/lib/i18n/locale";
 
-export interface VoiceSettings {
-  /** Speak announcements (chimes and captions still follow their own switches). */
-  enabled: boolean;
-  language: VoiceLanguage;
+export interface AnnounceSettings {
+  /** Speak the 5-minute warning. */
+  fiveMinutes: boolean;
+  /** Thai wording (empty = the standard wording). */
+  text: string;
+  /** Chosen Thai voice ("" = the best one on this computer). */
+  voiceUri: string;
   rate: number;
-  thVoice: string;
-  enVoice: string;
-  /** Show the announcement as a bilingual caption on the projector. */
-  captions: boolean;
-  /** Which non-checkpoint moments are announced (checkpoints follow the warning minutes). */
-  moments: Record<MomentId, boolean>;
-  /** Staff-edited wording; missing entries use the standard script. */
-  scripts: Partial<Record<AnnouncementId, Bi>>;
+  chime: ChimeStyle;
 }
 
-export const DEFAULT_VOICE: VoiceSettings = {
-  enabled: true,
-  language: "th-en",
-  rate: 0.92,
-  thVoice: "",
-  enVoice: "",
-  captions: true,
-  moments: DEFAULT_MOMENTS,
-  scripts: {},
+export const RATE_OPTIONS = [0.8, 0.95, 1.1] as const;
+
+export const DEFAULT_ANNOUNCE: AnnounceSettings = {
+  fiveMinutes: true,
+  text: "",
+  voiceUri: "",
+  rate: 0.95,
+  chime: "dingdong",
 };
 
-const LANGUAGES: readonly VoiceLanguage[] = ["th", "en", "th-en", "en-th"];
-
-export function normalizeVoice(value: unknown): VoiceSettings {
-  const v = (typeof value === "object" && value !== null ? value : {}) as Partial<VoiceSettings> & {
-    announceStart?: boolean;
-    announceEnd?: boolean;
-  };
-  const scripts: Partial<Record<AnnouncementId, Bi>> = {};
-  for (const id of ANNOUNCEMENT_ORDER) {
-    const s = v.scripts?.[id];
-    if (s && typeof s.th === "string" && typeof s.en === "string") scripts[id] = { th: s.th, en: s.en };
-  }
-  const moments = { ...DEFAULT_MOMENTS };
-  for (const key of Object.keys(DEFAULT_MOMENTS) as MomentId[]) {
-    if (typeof v.moments?.[key] === "boolean") moments[key] = v.moments[key];
-  }
-  // Settings saved before moments existed.
-  if (typeof v.announceStart === "boolean") moments.start = v.announceStart;
-  if (typeof v.announceEnd === "boolean") moments.end = v.announceEnd;
+export function normalizeAnnounce(value: unknown): AnnounceSettings {
+  const v = (typeof value === "object" && value !== null ? value : {}) as Partial<AnnounceSettings>;
   return {
-    enabled: typeof v.enabled === "boolean" ? v.enabled : DEFAULT_VOICE.enabled,
-    language: LANGUAGES.includes(v.language as VoiceLanguage) ? (v.language as VoiceLanguage) : DEFAULT_VOICE.language,
-    rate: typeof v.rate === "number" && v.rate >= 0.5 && v.rate <= 1.5 ? v.rate : DEFAULT_VOICE.rate,
-    thVoice: typeof v.thVoice === "string" ? v.thVoice : "",
-    enVoice: typeof v.enVoice === "string" ? v.enVoice : "",
-    captions: typeof v.captions === "boolean" ? v.captions : DEFAULT_VOICE.captions,
-    moments,
-    scripts,
+    fiveMinutes: typeof v.fiveMinutes === "boolean" ? v.fiveMinutes : DEFAULT_ANNOUNCE.fiveMinutes,
+    text: typeof v.text === "string" ? v.text : "",
+    voiceUri: typeof v.voiceUri === "string" ? v.voiceUri : "",
+    rate: (RATE_OPTIONS as readonly number[]).includes(v.rate as number) ? (v.rate as number) : DEFAULT_ANNOUNCE.rate,
+    chime: (CHIME_STYLES as readonly string[]).includes(v.chime as string) ? (v.chime as ChimeStyle) : DEFAULT_ANNOUNCE.chime,
   };
 }
-
-export type CaptionTone = "start" | "warning" | "end" | "custom";
 
 export interface Caption {
   key: number;
   text: Bi;
-  tone: CaptionTone;
 }
-
-export type AnnouncementRequest = { ids: AnnouncementId[] } | { custom: Bi };
 
 export interface AnnounceOptions {
-  voice: VoiceSettings;
-  /** Master sound switch (the M key). Off = no chime and no speech. */
-  sound: boolean;
+  settings: AnnounceSettings;
   volume: number;
-  context: AnnouncementContext;
-  /** Play the attention chime first. */
-  chime: boolean;
+  /** Master sound switch: off = words on screen only, no chime or voice. */
+  sound: boolean;
+  /** Show the words on the projector (off for a quiet test before the exam). */
+  caption: boolean;
 }
 
-export type LogStatus = SpeakStatus | "chime" | "muted";
-
-export interface LogEntry {
-  key: number;
-  at: number;
-  label: Bi;
-  status: LogStatus;
-}
-
-function toneOf(ids: AnnouncementId[]): CaptionTone {
-  if (ids.includes("end")) return "end";
-  if (ids.includes("start")) return "start";
-  return "warning";
-}
-
-function chimeFor(tone: CaptionTone, speaking: boolean): ExamSound {
-  if (tone === "start") return "start";
-  if (tone === "end") return speaking ? "end-chime" : "end";
-  return speaking ? "attention" : "warning";
-}
+/** Edge adds its online voices a moment after the first list arrives; wait this long before saying "no Thai voice". */
+const VOICE_GRACE_MS = 1500;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export function useAnnouncer() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [supported, setSupported] = useState(false);
+  const [voicesLoaded, setVoicesLoaded] = useState(false);
+  const [supported, setSupported] = useState(true);
   const [caption, setCaption] = useState<Caption | null>(null);
   const [speaking, setSpeaking] = useState(false);
-  const [blocked, setBlocked] = useState(false);
-  const [log, setLog] = useState<LogEntry[]>([]);
+  const [result, setResult] = useState<SpeakResult | null>(null);
+  /** Bumped by every announcement and by Stop; a superseded announcement stops at its next step. */
   const sequence = useRef(0);
-  const clearTimer = useRef<number | null>(null);
+  /** Separate from `sequence` so a quiet test never cancels the hiding of a caption already on screen. */
+  const captionSeq = useRef(0);
+  const captionTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!speechSupported()) return;
-    setSupported(true);
+    if (!speechSupported()) {
+      setSupported(false);
+      setVoicesLoaded(true);
+      return;
+    }
     let alive = true;
-    void loadVoices(5000).then((list) => alive && setVoices(list));
+    let grace: number | null = null;
+    void loadVoices().then((list) => {
+      if (!alive) return;
+      setVoices(list);
+      grace = window.setTimeout(() => alive && setVoicesLoaded(true), VOICE_GRACE_MS);
+    });
     const off = onVoicesChanged(() => setVoices(window.speechSynthesis.getVoices()));
     return () => {
       alive = false;
+      if (grace !== null) window.clearTimeout(grace);
       off();
       stopSpeaking();
     };
   }, []);
 
-  const hideCaptionLater = useCallback((ms: number) => {
-    if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
-    const mine = sequence.current;
-    clearTimer.current = window.setTimeout(() => {
-      if (mine === sequence.current) setCaption(null);
+  const hideCaptionAfter = useCallback((id: number, ms: number) => {
+    if (captionTimer.current !== null) window.clearTimeout(captionTimer.current);
+    captionTimer.current = window.setTimeout(() => {
+      if (id === captionSeq.current) setCaption(null);
     }, ms);
   }, []);
 
+  /** Chime, then the Thai voice. The words stay on screen for a minute afterwards so anyone who missed them can read them. */
   const announce = useCallback(
-    async (request: AnnouncementRequest, options: AnnounceOptions): Promise<LogStatus> => {
+    async ({ settings, volume, sound, caption: showCaption }: AnnounceOptions): Promise<SpeakResult | null> => {
       const mine = ++sequence.current;
+      // A new announcement replaces the old one rather than talking over it.
       stopSpeaking();
-      const isPreset = "ids" in request;
-      const script = isPreset ? combineScripts(request.ids, options.voice.scripts) : request.custom;
-      const tone: CaptionTone = isPreset ? toneOf(request.ids) : "custom";
-      const label: Bi = isPreset
-        ? {
-            th: request.ids.map((id) => ANNOUNCEMENT_LABELS[id].th).join(" + "),
-            en: request.ids.map((id) => ANNOUNCEMENT_LABELS[id].en).join(" + "),
-          }
-        : { th: "ประกาศเอง", en: "Custom" };
-      const willSpeak = options.sound && options.voice.enabled;
-
-      // Captions stay until the next announcement (at least a minute) so latecomers and anyone who
-      // cannot hear still get the message; "time is up" stays for five.
-      if (options.voice.captions) {
-        setCaption({ key: mine, text: captionFor(script, options.context), tone });
-        hideCaptionLater(tone === "end" ? 300_000 : 120_000);
+      let captionId: number | null = null;
+      if (showCaption) {
+        captionId = ++captionSeq.current;
+        setCaption({ key: captionId, text: captionFor(settings.text) });
+        hideCaptionAfter(captionId, sound ? 90_000 : 60_000);
       }
-
-      if (options.sound && options.chime) {
-        const seconds = playSound(chimeFor(tone, willSpeak));
-        if (seconds > 0 && willSpeak) await sleep(seconds * 1000 + 300);
+      if (!sound) {
+        setSpeaking(false);
+        return null;
       }
-      if (mine !== sequence.current) return "ok";
-
-      let status: LogStatus = !options.sound ? "muted" : "chime";
-      if (willSpeak) {
-        setSpeaking(true);
-        status = await speak(spokenParts(script, options.context, options.voice.language), {
-          voices,
-          voiceUris: { th: options.voice.thVoice, en: options.voice.enVoice },
-          rate: options.voice.rate,
-          volume: Math.max(0.2, options.volume),
-        });
-        if (mine === sequence.current) setSpeaking(false);
-        setBlocked(status === "blocked");
+      setSpeaking(true);
+      // Wakes an audio engine the browser suspended (e.g. after a reload); works once the page has had a click.
+      await unlockAudio();
+      if (mine !== sequence.current) return null;
+      const seconds = playChime(settings.chime);
+      if (seconds > 0) await sleep(seconds * 1000 + 250);
+      if (mine !== sequence.current) return null;
+      const outcome = await speakThai(speakableThai(announcementText(settings.text)), {
+        voiceUri: settings.voiceUri,
+        rate: settings.rate,
+        volume: Math.max(0.2, volume),
+      });
+      if (mine === sequence.current) {
+        setSpeaking(false);
+        if (outcome.status !== "stopped") setResult(outcome);
+        if (captionId !== null) hideCaptionAfter(captionId, 60_000);
       }
-      if (options.voice.captions && mine === sequence.current) hideCaptionLater(tone === "end" ? 300_000 : 60_000);
-      setLog((entries) => [{ key: mine, at: options.context.now, label, status }, ...entries].slice(0, 50));
-      return status;
+      return outcome;
     },
-    [voices, hideCaptionLater],
+    [hideCaptionAfter],
   );
 
-  const silence = useCallback(() => {
+  /** Stops the voice (and chime sequencing). `keepCaption` leaves the words on screen, e.g. when muting. */
+  const silence = useCallback((options: { keepCaption?: boolean } = {}) => {
     sequence.current += 1;
     stopSpeaking();
     setSpeaking(false);
-    setCaption(null);
+    if (!options.keepCaption) {
+      captionSeq.current += 1;
+      setCaption(null);
+    }
   }, []);
 
-  const thVoices = voicesFor("th", voices);
-  const enVoices = voicesFor("en", voices);
-
-  /** Languages the chosen order needs but this computer has no voice for. */
-  const missingLanguages = (language: VoiceLanguage) =>
-    supported && voices.length ? languageOrder(language).filter((lang) => (lang === "th" ? thVoices : enVoices).length === 0) : [];
-
-  return {
-    supported,
-    voices,
-    thVoices,
-    enVoices,
-    caption,
-    speaking,
-    blocked,
-    clearBlocked: () => setBlocked(false),
-    log,
-    announce,
-    silence,
-    missingLanguages,
-  };
+  return { supported, voicesLoaded, voices: thaiVoices(voices), caption, speaking, result, announce, silence };
 }
-

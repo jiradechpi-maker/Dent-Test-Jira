@@ -19,8 +19,8 @@ export default async function ExamTimerPage() {
         icon={Timer}
         title={t(getNavItem("exam-timer").label)}
         description={t(
-          "ใส่เวลาสอบตามตาราง (เช่น 09:00–12:00) จอแสดงเวลาสอบ ระยะเวลารวม เวลาที่เหลือ และกติกาเข้า-ออกห้องสอบ · ประกาศเสียงพูดสองภาษา (ไทย/อังกฤษ) พร้อมคำบรรยายบนจอ เช่น เหลือเวลาสอบอีก 1 ชั่วโมง / 30 นาที / 15 นาที / 5 นาที · กด F เพื่อแสดงเต็มจอบนโปรเจกเตอร์",
-          "Enter the scheduled exam time (e.g. 09:00–12:00) — the screen shows the exam window, total duration, time remaining and the rules for entering and leaving the exam room · bilingual (Thai/English) spoken announcements with on-screen captions, e.g. 1 hour, 30, 15 and 5 minutes remaining · press F for full screen on the projector",
+          "ใส่เวลาสอบตามตาราง แล้วกดเริ่ม · ประกาศเสียงเมื่อเหลือเวลาสอบ 5 นาที (เปิด/ปิดได้) · กด F เพื่อแสดงเต็มจอบนโปรเจกเตอร์",
+          "Enter the scheduled times and press start · optional spoken warning at 5 minutes left · press F for full screen on the projector",
         )}
         className="mb-5"
       />

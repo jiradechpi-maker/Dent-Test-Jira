@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
-import { DoorClosed, DoorOpen, Info, Megaphone } from "lucide-react";
+import { Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { todayInBangkok } from "@/lib/thai";
 import { displayYear, formatDay, monthName, weekdayName } from "@/lib/i18n/dates";
@@ -14,10 +14,8 @@ import {
   phaseAt,
   progressAt,
   remainingMs,
-  roomNotices,
   urgencyAt,
   type ExamSession,
-  type RoomRules,
   type Urgency,
 } from "@/lib/exam-timer/timing";
 
@@ -55,7 +53,6 @@ export interface TimerDisplayProps {
   room: string;
   theme: DisplayTheme;
   fullscreen: boolean;
-  rules: RoomRules;
   caption?: Caption | null;
   children?: React.ReactNode;
 }
@@ -69,7 +66,7 @@ function bilingualDate(iso: string): string {
 
 /** The projector-facing screen. Sizes itself to its container with container-query units. */
 export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(function TimerDisplay(
-  { session, now, title, room, theme, fullscreen, rules, caption, children },
+  { session, now, title, room, theme, fullscreen, caption, children },
   ref,
 ) {
   const dark = theme === "dark";
@@ -80,7 +77,6 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
   const justEnded = session !== null && phase === "ended" && now - session.endAt < 12_000;
   const extension = session ? extensionMs(session) : 0;
   const plannedEnd = session ? session.endAt - extension : 0;
-  const notices = session ? roomNotices(session, now, rules) : [];
   const dateText = now > 0 ? bilingualDate(todayInBangkok(new Date(now))) : "";
 
   const label =
@@ -168,21 +164,13 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
           aria-live="polite"
           className={cn(
             "mx-[4cqw] mb-[1.6cqw] flex shrink-0 items-start gap-[1.4cqw] rounded-[1.4cqw] px-[2cqw] py-[1.2cqw] shadow-xl animate-fade-in",
-            caption.tone === "end"
-              ? "bg-rose-600 text-white"
-              : caption.tone === "warning"
-                ? dark
-                  ? "bg-amber-300 text-amber-950"
-                  : "bg-amber-100 text-amber-950 ring-1 ring-amber-300"
-                : dark
-                  ? "bg-white text-neutral-900"
-                  : "bg-brand-700 text-white",
+            dark ? "bg-amber-300 text-amber-950" : "bg-amber-100 text-amber-950 ring-1 ring-amber-300",
           )}
         >
           <Megaphone className="mt-[0.3cqw] size-[2.6cqw] shrink-0" aria-hidden />
           <div className="min-w-0">
             {caption.text.th ? (
-              <p lang="th" className="font-[family-name:var(--font-sans)] text-[2.3cqw] leading-snug font-semibold">
+              <p lang="th" className="font-[family-name:var(--font-sans)] text-[2.6cqw] leading-snug font-semibold">
                 {caption.text.th}
               </p>
             ) : null}
@@ -192,34 +180,6 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
               </p>
             ) : null}
           </div>
-        </div>
-      ) : null}
-
-      {/* Exam-room rules, worded for right now (the caption takes their place while it is shown) */}
-      {notices.length && !caption ? (
-        <div className="flex flex-wrap items-center justify-center gap-[1.2cqw] px-[4cqw] pb-[1.6cqw]">
-          {notices.map((notice) => {
-            const Icon = notice.state === "open" ? DoorOpen : notice.state === "closed" ? DoorClosed : Info;
-            return (
-              <span
-                key={notice.key}
-                className={cn(
-                  "flex items-center gap-[0.9cqw] rounded-[1.6cqw] px-[1.6cqw] py-[0.6cqw] text-[1.8cqw] font-medium",
-                  notice.state === "open" && (dark ? "bg-emerald-400/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"),
-                  notice.state === "closed" && (dark ? "bg-rose-400/15 text-rose-200" : "bg-rose-50 text-rose-700"),
-                  notice.state === "info" && (dark ? "bg-white/10 text-white/75" : "bg-neutral-100 text-neutral-600"),
-                )}
-              >
-                <Icon className="size-[2.2cqw] shrink-0" aria-hidden />
-                <span className="flex flex-col leading-tight">
-                  <span lang="th">{notice.text.th}</span>
-                  <span lang="en" className="font-[family-name:var(--font-latin)] text-[1.5cqw] font-normal opacity-80">
-                    {notice.text.en}
-                  </span>
-                </span>
-              </span>
-            );
-          })}
         </div>
       ) : null}
 

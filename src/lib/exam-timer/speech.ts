@@ -1,17 +1,17 @@
 /**
- * Spoken announcements with the browser's built-in voices (Web Speech API) — no server, works offline
- * with installed voices. Handles the well-known rough edges: voices that load late, Chrome cutting off
- * long utterances, and utterances garbage-collected before they finish.
+ * Spoken announcements with the browser's built-in voices (Web Speech API). Handles the known rough edges:
+ * voices that load late, Chrome dropping an utterance queued right after cancel(), Chrome cutting off long
+ * utterances, utterances garbage-collected before they finish, and online voices failing on a weak network.
  */
 
-import type { SpokenPart } from "./announcements";
+import type { Bi } from "@/lib/i18n/locale";
 
 export function speechSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 }
 
 /** Voices arrive asynchronously (and Safari never fires `voiceschanged`), so poll briefly as well. */
-export function loadVoices(timeoutMs = 3000): Promise<SpeechSynthesisVoice[]> {
+export function loadVoices(timeoutMs = 5000): Promise<SpeechSynthesisVoice[]> {
   if (!speechSupported()) return Promise.resolve([]);
   const synth = window.speechSynthesis;
   const now = synth.getVoices();
@@ -40,40 +40,51 @@ export function onVoicesChanged(callback: () => void): () => void {
   return () => window.speechSynthesis.removeEventListener("voiceschanged", callback);
 }
 
-const PREFERRED: Record<"th" | "en", RegExp[]> = {
-  th: [/premwadee/i, /niwat/i, /natural/i, /google/i, /kanya/i, /narisa/i, /pattara/i],
-  en: [/natural/i, /google uk english female/i, /google us english/i, /google/i, /serena|daniel|samantha|karen|libby|sonia|aria|jenny/i],
+const isThai = (voice: SpeechSynthesisVoice) => voice.lang.toLowerCase().replace("_", "-").startsWith("th");
+// Edge occasionally reports half-loaded voices as "Microsoft undefined Online (Natural) - undefined".
+const isUsable = (voice: SpeechSynthesisVoice) => !/undefined/i.test(voice.name);
+
+const KNOWN: { pattern: RegExp; name: string; gender: Bi }[] = [
+  { pattern: /premwadee/i, name: "Premwadee", gender: { th: "หญิง", en: "female" } },
+  { pattern: /niwat/i, name: "Niwat", gender: { th: "ชาย", en: "male" } },
+  { pattern: /pattara/i, name: "Pattara", gender: { th: "ชาย", en: "male" } },
+  { pattern: /kanya/i, name: "Kanya", gender: { th: "หญิง", en: "female" } },
+  { pattern: /narisa/i, name: "Narisa", gender: { th: "หญิง", en: "female" } },
+  { pattern: /google/i, name: "Google", gender: { th: "หญิง", en: "female" } },
+];
+
+const quality = (voice: SpeechSynthesisVoice) => (/natural|online|neural|premium|enhanced/i.test(voice.name) ? 0 : voice.localService ? 2 : 1);
+
+const knownRank = (voice: SpeechSynthesisVoice) => {
+  const index = KNOWN.findIndex((k) => k.pattern.test(voice.name));
+  return index === -1 ? KNOWN.length : index;
 };
 
-export function voicesFor(lang: "th" | "en", voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
-  // Edge occasionally reports half-loaded voices as "Microsoft undefined Online (Natural) - undefined".
-  const matching = voices.filter((voice) => voice.lang.toLowerCase().replace("_", "-").startsWith(lang) && !/undefined/i.test(voice.name));
-  const score = (voice: SpeechSynthesisVoice) => {
-    const index = PREFERRED[lang].findIndex((pattern) => pattern.test(voice.name));
-    let s = index === -1 ? 100 : index;
-    // International English for an international room: British/US first.
-    if (lang === "en" && !/^en-(gb|us)/i.test(voice.lang.replace("_", "-"))) s += 50;
-    return s;
-  };
-  return [...matching].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
+/** Every Thai voice on this computer, the most natural-sounding first (Premwadee leads: the clearest for a room). */
+export function thaiVoices(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  return voices
+    .filter((voice) => isThai(voice) && isUsable(voice))
+    .sort((a, b) => quality(a) - quality(b) || knownRank(a) - knownRank(b) || a.name.localeCompare(b.name));
 }
 
-export function pickVoice(lang: "th" | "en", voices: SpeechSynthesisVoice[], preferredUri: string): SpeechSynthesisVoice | null {
-  const candidates = voicesFor(lang, voices);
-  return candidates.find((voice) => voice.voiceURI === preferredUri) ?? candidates[0] ?? null;
+/** "Premwadee · หญิง · เสียงธรรมชาติ (ใช้อินเทอร์เน็ต)" */
+export function voiceLabel(voice: SpeechSynthesisVoice, locale: "th" | "en"): string {
+  const known = KNOWN.find((k) => k.pattern.test(voice.name));
+  const name = known?.name ?? voice.name.replace(/^Microsoft\s+/i, "").replace(/\s*-\s*Thai.*$/i, "");
+  const parts = [name];
+  if (known) parts.push(known.gender[locale]);
+  if (quality(voice) === 0) parts.push(locale === "th" ? "เสียงธรรมชาติ (ใช้อินเทอร์เน็ต)" : "natural voice (needs internet)");
+  else if (voice.localService) parts.push(locale === "th" ? "ในเครื่อง" : "on this computer");
+  return parts.join(" · ");
 }
 
 /**
- * Chrome stops speaking after ~15 s on long utterances, so speak sentence by sentence. Thai has no full stops,
- * so long Thai text is split at spaces into phrases of at most `max` characters.
+ * Chrome stops speaking after ~15 s on a long utterance, so long text is spoken in phrases. Thai has no
+ * full stops, so it is split at spaces into phrases of at most `max` characters.
  */
 export function splitForSpeech(text: string, max = 160): string[] {
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
   const chunks: string[] = [];
-  for (const sentence of sentences) {
+  for (const sentence of text.split(/(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean)) {
     if (sentence.length <= max) {
       chunks.push(sentence);
       continue;
@@ -96,47 +107,71 @@ export function splitForSpeech(text: string, max = 160): string[] {
 const live = new Set<SpeechSynthesisUtterance>();
 let keepAlive: number | null = null;
 let generation = 0;
+let lastCancelAt = 0;
+let primed = false;
 
+/** Chrome silently drops an utterance queued too soon after cancel(), so speech waits this long after one. */
+const SETTLE_MS = 250;
+/** A voice that hasn't started within this time is treated as silent and the fallback is tried. */
+const START_TIMEOUT_MS = 4000;
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+/** Stops any speech. Only calls cancel() when something is playing (an idle cancel() can swallow the next speak()). */
 export function stopSpeaking(): void {
   if (!speechSupported()) return;
   generation += 1;
   live.clear();
   if (keepAlive !== null) window.clearInterval(keepAlive);
   keepAlive = null;
-  window.speechSynthesis.cancel();
+  const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+    lastCancelAt = Date.now();
+  }
 }
 
-export interface SpeakOptions {
-  voices: SpeechSynthesisVoice[];
-  voiceUris: { th: string; en: string };
-  rate: number;
-  volume: number;
+async function settle(): Promise<void> {
+  const wait = SETTLE_MS - (Date.now() - lastCancelAt);
+  if (wait > 0) await sleep(wait);
 }
 
 /**
- * ok — everything was spoken; partial — a language had no voice and was skipped; no-voice — nothing to speak with;
- * blocked — the browser wants a click first (autoplay policy); error — the engine failed.
+ * iPhone/iPad only speak if the first utterance starts inside a tap. Call this synchronously at the start of a
+ * click handler: it speaks a silent dot once, which unlocks speech for the rest of the visit.
  */
-export type SpeakStatus = "ok" | "partial" | "no-voice" | "blocked" | "error";
-
-function utterancesFor(text: string, voice: SpeechSynthesisVoice, options: SpeakOptions): SpeechSynthesisUtterance[] {
-  return splitForSpeech(text).map((chunk) => {
-    const utterance = new SpeechSynthesisUtterance(chunk);
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-    utterance.rate = options.rate;
-    utterance.volume = options.volume;
-    utterance.pitch = 1;
-    return utterance;
-  });
+export function primeSpeech(): void {
+  if (primed || !speechSupported()) return;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (!ios) return;
+  primed = true;
+  const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) return;
+  const utterance = new SpeechSynthesisUtterance(".");
+  utterance.volume = 0;
+  live.add(utterance);
+  utterance.addEventListener("end", () => live.delete(utterance));
+  synth.speak(utterance);
 }
 
-/** Speaks a queue; resolves with the first error code, or null when the last utterance ended. */
+/**
+ * ok — spoken; no-voice — this computer has no Thai voice; blocked — the browser wants a click first;
+ * silent — the voice never started; error — the speech engine failed; stopped — cancelled by Stop or a newer
+ * announcement; unsupported — the browser has no speech at all.
+ */
+export type SpeakStatus = "ok" | "no-voice" | "blocked" | "silent" | "error" | "stopped" | "unsupported";
+
+export interface SpeakResult {
+  status: SpeakStatus;
+  voice: SpeechSynthesisVoice | null;
+}
+
+/** Speaks a queue; resolves with null when it finished, or an error code ("silent" if it never started). */
 function playQueue(queue: SpeechSynthesisUtterance[], mine: number): Promise<string | null> {
   const synth = window.speechSynthesis;
   for (const utterance of queue) live.add(utterance);
   // Chrome's Google voices stop after ~15 s; a periodic pause/resume keeps them going. Other voices
-  // (installed ones, Edge's Natural voices) don't need it and can stutter when paused.
+  // (installed ones, Edge's natural voices) don't need it and can stutter when paused.
   if (queue.some((utterance) => utterance.voice?.name.startsWith("Google"))) {
     keepAlive = window.setInterval(() => {
       if (synth.speaking && !synth.paused) {
@@ -146,14 +181,15 @@ function playQueue(queue: SpeechSynthesisUtterance[], mine: number): Promise<str
     }, 10_000);
   }
   const totalChars = queue.reduce((sum, u) => sum + u.text.length, 0);
-  const rate = queue[0]?.rate ?? 1;
-  const safetyMs = 8000 + (totalChars / Math.max(0.5, rate)) * 180;
+  const safetyMs = 8000 + (totalChars / Math.max(0.5, queue[0]?.rate ?? 1)) * 180;
 
   return new Promise((resolve) => {
     let settled = false;
+    let started = false;
     const finish = (error: string | null) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(watchdog);
       window.clearTimeout(timeout);
       if (mine === generation) {
         if (keepAlive !== null) window.clearInterval(keepAlive);
@@ -162,50 +198,68 @@ function playQueue(queue: SpeechSynthesisUtterance[], mine: number): Promise<str
       }
       resolve(error);
     };
-    const timeout = window.setTimeout(() => finish(null), safetyMs);
+    const watchdog = window.setTimeout(() => !started && finish("silent"), START_TIMEOUT_MS);
+    const timeout = window.setTimeout(() => finish(started ? null : "silent"), safetyMs);
     queue.forEach((utterance, index) => {
+      utterance.addEventListener("start", () => {
+        started = true;
+      });
       utterance.addEventListener("error", (event) => {
-        const code = (event as SpeechSynthesisErrorEvent).error;
-        // "interrupted"/"canceled" mean a newer announcement took over — not a failure.
-        finish(code === "interrupted" || code === "canceled" ? null : code);
+        const code = (event as SpeechSynthesisErrorEvent).error || "error";
+        // interrupted/canceled caused by Stop or a newer announcement are not failures of this voice.
+        finish((code === "interrupted" || code === "canceled") && mine !== generation ? null : code);
       });
       if (index === queue.length - 1) utterance.addEventListener("end", () => finish(null));
     });
-    for (const utterance of queue) synth.speak(utterance);
+    // A paused engine (e.g. after a tab switch) stays silent until resumed.
     if (synth.paused) synth.resume();
+    for (const utterance of queue) synth.speak(utterance);
+  });
+}
+
+function utterances(text: string, voice: SpeechSynthesisVoice, rate: number, volume: number): SpeechSynthesisUtterance[] {
+  return splitForSpeech(text).map((chunk) => {
+    const utterance = new SpeechSynthesisUtterance(chunk);
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+    utterance.rate = rate;
+    utterance.volume = volume;
+    utterance.pitch = 1;
+    return utterance;
   });
 }
 
 /**
- * Speaks the parts in order. Never hangs the caller (safety timeout). If an online voice fails
- * (flaky exam-room network), the announcement is retried once with an installed voice.
+ * Speaks Thai text with the chosen voice (or the best Thai voice). Never hangs the caller. If the voice fails or
+ * stays silent (e.g. an online voice on a weak exam-room network), it tries once more with another Thai voice,
+ * preferring one installed on the computer.
  */
-export async function speak(parts: SpokenPart[], options: SpeakOptions): Promise<SpeakStatus> {
-  if (!speechSupported() || parts.length === 0) return "no-voice";
+export async function speakThai(text: string, options: { voiceUri: string; rate: number; volume: number }): Promise<SpeakResult> {
+  if (!speechSupported()) return { status: "unsupported", voice: null };
+  const synth = window.speechSynthesis;
   stopSpeaking();
   const mine = generation;
+  const all = synth.getVoices().length ? synth.getVoices() : await loadVoices();
+  if (mine !== generation) return { status: "stopped", voice: null };
+  const candidates = thaiVoices(all);
+  const voice = candidates.find((v) => v.voiceURI === options.voiceUri) ?? candidates[0] ?? null;
+  if (!voice || !text.trim()) return { status: "no-voice", voice: null };
 
-  const plan = parts
-    .map((part) => ({ part, voice: pickVoice(part.lang, options.voices, options.voiceUris[part.lang]) }))
-    .filter((item): item is { part: SpokenPart; voice: SpeechSynthesisVoice } => item.voice !== null);
-  if (!plan.length) return "no-voice";
-  const skipped = plan.length < parts.length;
+  await settle();
+  if (mine !== generation) return { status: "stopped", voice };
+  const error = await playQueue(utterances(text, voice, options.rate, options.volume), mine);
+  if (mine !== generation) return { status: "stopped", voice };
+  if (error === null) return { status: "ok", voice };
+  if (error === "not-allowed") return { status: "blocked", voice };
 
-  const queue = plan.flatMap(({ part, voice }) => utterancesFor(part.text, voice, options));
-  const error = await playQueue(queue, mine);
-  if (error === null) return skipped ? "partial" : "ok";
-  if (error === "not-allowed") return "blocked";
-  if (mine !== generation) return "ok";
-
-  // Retry with installed voices only.
-  const local = plan
-    .map(({ part, voice }) => ({ part, voice: voice.localService ? voice : (voicesFor(part.lang, options.voices).find((v) => v.localService) ?? null) }))
-    .filter((item): item is { part: SpokenPart; voice: SpeechSynthesisVoice } => item.voice !== null);
-  if (!local.length || local.every((item, i) => item.voice === plan[i]?.voice)) return "error";
+  const fallback = candidates.find((v) => v !== voice && v.localService) ?? candidates.find((v) => v !== voice) ?? null;
+  if (!fallback) return { status: error === "silent" ? "silent" : "error", voice };
   stopSpeaking();
-  const retry = await playQueue(
-    local.flatMap(({ part, voice }) => utterancesFor(part.text, voice, options)),
-    generation,
-  );
-  return retry === null ? "partial" : retry === "not-allowed" ? "blocked" : "error";
+  const retryMine = generation;
+  await settle();
+  if (retryMine !== generation) return { status: "stopped", voice: fallback };
+  const retry = await playQueue(utterances(text, fallback, options.rate, options.volume), retryMine);
+  if (retryMine !== generation) return { status: "stopped", voice: fallback };
+  if (retry === null) return { status: "ok", voice: fallback };
+  return { status: retry === "not-allowed" ? "blocked" : retry === "silent" ? "silent" : "error", voice: fallback };
 }
