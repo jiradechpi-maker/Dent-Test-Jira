@@ -13,15 +13,14 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
   return {
     title: {
-      default: t("DentOps · คณะทันตแพทยศาสตร์ สจล.", "DentOps · Faculty of Dentistry, KMITL"),
-      template: "%s · DentOps",
+      default: t("Dentboard · คณะทันตแพทยศาสตร์ สจล.", "Dentboard · Faculty of Dentistry, KMITL"),
+      template: "%s · Dentboard",
     },
     description: t(
       "ระบบบริหารจัดการงานวิชาการและเอกสารอัตโนมัติ คณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
       "Academic operations and document automation for the Faculty of Dentistry, King Mongkut's Institute of Technology Ladkrabang",
     ),
-    applicationName: "DentOps",
-    icons: { icon: "/brand/kmitl-emblem.jpeg" },
+    applicationName: "Dentboard",
   };
 }
 
