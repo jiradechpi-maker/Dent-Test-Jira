@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   BellRing,
+  CalendarClock,
   Clock3,
   Maximize,
   Minimize,
@@ -28,6 +29,8 @@ import { Label } from "@/components/ui/label";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { todayInBangkok } from "@/lib/thai";
+import { useScheduleBundle } from "@/components/schedule/use-schedule";
 import {
   createSession,
   createSessionFromDuration,
@@ -39,15 +42,20 @@ import {
   phaseAt,
   todayAt,
   type ExamSession,
+  type RoomRules,
   type SessionError,
 } from "@/lib/exam-timer/timing";
 import { isAudioReady, playSound, setVolume, unlockAudio, type ExamSound } from "@/lib/exam-timer/sounds";
 import { TimerDisplay, type DisplayTheme } from "./timer-display";
 import { useServerClock } from "./use-server-clock";
 
-const STORAGE_KEY = "dentops.examTimer.v1";
+const STORAGE_KEY = "dentops.examTimer.v2";
+const LEGACY_STORAGE_KEY = "dentops.examTimer.v1";
 const WARNING_OPTIONS = [30, 15, 5] as const;
 const DURATION_CHIPS = [60, 90, 120, 150, 180] as const;
+const LATE_ENTRY_OPTIONS = [0, 15, 30, 45] as const;
+const EARLY_LEAVE_OPTIONS = [0, 30, 45, 60] as const;
+const LAST_LEAVE_OPTIONS = [0, 10, 15] as const;
 
 interface TimerSettings {
   title: string;
@@ -59,18 +67,24 @@ interface TimerSettings {
   sound: boolean;
   volume: number;
   theme: DisplayTheme;
+  lateEntryMinutes: number;
+  earlyLeaveMinutes: number;
+  lastLeaveMinutes: number;
 }
 
 const DEFAULT_SETTINGS: TimerSettings = {
   title: "",
   room: "",
-  startMode: "now",
+  startMode: "scheduled",
   startTime: "",
   endTime: "",
   warnings: [30, 15, 5],
   sound: true,
   volume: 0.85,
   theme: "dark",
+  lateEntryMinutes: 30,
+  earlyLeaveMinutes: 45,
+  lastLeaveMinutes: 0,
 };
 
 interface StoredState {
@@ -100,10 +114,13 @@ function isValidSession(value: unknown): value is ExamSession {
 
 function readStored(): StoredState | null {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const legacy = window.localStorage.getItem(STORAGE_KEY) === null;
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredState>;
     const settings = { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) };
+    // v1 defaulted to "start now", which put the button press time on screen instead of the exam's real start.
+    if (legacy) settings.startMode = "scheduled";
     if (!Array.isArray(settings.warnings)) settings.warnings = DEFAULT_SETTINGS.warnings;
     return { settings, session: isValidSession(parsed.session) ? parsed.session : null };
   } catch {
@@ -121,6 +138,24 @@ function writeStored(state: StoredState): void {
 
 function hhmm(ms: number): string {
   return formatClock(ms);
+}
+
+/** Round start times around now (from `before` steps ago), for quick-pick chips — a start in the past means "already running". */
+function startTimesAround(now: number, stepMinutes: number, before: number, after: number): string[] {
+  const step = stepMinutes * 60_000;
+  const base = Math.floor(now / step) * step;
+  const out: string[] = [];
+  for (let i = -before; i <= after; i += 1) {
+    const candidate = base + i * step;
+    if (new Date(candidate).getDate() === new Date(now).getDate()) out.push(hhmm(candidate));
+  }
+  return out;
+}
+
+/** The quarter hour nearest to now — a sensible first guess for the scheduled start. */
+function nearestQuarter(now: number): string {
+  const step = 15 * 60_000;
+  return hhmm(Math.round(now / step) * step);
 }
 
 /** Upcoming round times (every `stepMinutes`) after `now`, for quick-pick chips. */
@@ -167,10 +202,11 @@ export function ExamTimer() {
     const stored = readStored();
     const current = Date.now();
     if (stored) {
-      setSettings(stored.settings);
+      setSettings(stored.settings.startTime ? stored.settings : { ...stored.settings, startTime: nearestQuarter(current) });
       // Keep a finished session on screen for 15 minutes after it ended, then drop it.
       if (stored.session && current - stored.session.endAt < 15 * 60_000) setSession(stored.session);
     }
+    else setSettings((s) => ({ ...s, startTime: nearestQuarter(current) }));
     prevNowRef.current = current;
     setNow(current);
     setHydrated(true);
@@ -408,7 +444,33 @@ export function ExamTimer() {
 
   // ── Derived UI data ──────────────────────────────────────────────────────
   const endChips = useMemo(() => (now ? upcomingTimes(now, 30, 8, 10) : []), [now]);
-  const startChips = useMemo(() => (now ? upcomingTimes(now, 15, 4, 0) : []), [now]);
+  const startChips = useMemo(() => (now ? startTimesAround(now, 15, 2, 4) : []), [now]);
+  const rules: RoomRules = {
+    lateEntryMinutes: settings.lateEntryMinutes,
+    earlyLeaveMinutes: settings.earlyLeaveMinutes,
+    lastLeaveMinutes: settings.lastLeaveMinutes,
+  };
+
+  // Today's exams from the invigilation sheet — one tap fills the title, room and official times.
+  const { invigilation } = useScheduleBundle();
+  const today = now ? todayInBangkok(new Date(now)) : "";
+  const todaysExams = useMemo(() => {
+    if (!invigilation?.ok || !today) return [];
+    return invigilation.data.entries
+      .filter((entry) => entry.date === today && entry.start && entry.end && !entry.postponed)
+      .sort((a, b) => a.start!.localeCompare(b.start!));
+  }, [invigilation, today]);
+  const pickExam = (entry: (typeof todaysExams)[number]) => {
+    setSettings((s) => ({
+      ...s,
+      title: entry.title,
+      room: entry.rooms.join(" · "),
+      startMode: "scheduled",
+      startTime: entry.start!,
+      endTime: entry.end!,
+    }));
+    setError(null);
+  };
 
   const preview = useMemo(() => {
     if (!now || !settings.endTime) return null;
@@ -471,6 +533,7 @@ export function ExamTimer() {
             room={settings.room}
             theme={settings.theme}
             fullscreen={fullscreen}
+            rules={rules}
           >
             {hydrated && fullscreen ? controlBar : null}
             {session && settings.sound && !audioReady && phase !== "ended" ? (
@@ -526,11 +589,41 @@ export function ExamTimer() {
         <CardHeader>
           <div>
             <CardTitle>ตั้งเวลาสอบ</CardTitle>
-            <CardDescription>เลือกเวลาเลิกสอบ ระบบคำนวณเวลาที่เหลือจากเวลาปัจจุบันให้ทันที</CardDescription>
+            <CardDescription>ใส่เวลาสอบตามตาราง เช่น 09:00–12:00 — จอแสดงเวลาสอบจริงและระยะเวลารวม</CardDescription>
           </div>
           {running ? <Badge tone="success">กำลังจับเวลา</Badge> : null}
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          {todaysExams.length ? (
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-1.5">
+                <CalendarClock className="size-3.5 text-brand-600" aria-hidden /> สอบวันนี้ (จากตารางคุมสอบ)
+              </Label>
+              <ul className="flex flex-col gap-1">
+                {todaysExams.map((entry) => {
+                  const active = settings.title === entry.title && settings.startTime === entry.start && settings.endTime === entry.end;
+                  return (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        onClick={() => pickExam(entry)}
+                        className={cn(
+                          "flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-2.5 py-1.5 text-left text-xs transition-colors",
+                          active ? "border-brand-600 bg-brand-50" : "border-border hover:border-brand-300 hover:bg-brand-50/50",
+                        )}
+                      >
+                        <span className="shrink-0 font-[family-name:var(--font-latin)] font-semibold tabular">
+                          {entry.start}–{entry.end}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+                        {entry.rooms.length ? <span className="shrink-0 text-muted-foreground">{entry.rooms.join(", ")}</span> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <Field label="ชื่อการสอบ / รายวิชา" htmlFor="timer-title" className="col-span-2">
               <Input
@@ -559,8 +652,8 @@ export function ExamTimer() {
               value={settings.startMode}
               onChange={(v) => update("startMode", v)}
               options={[
+                { value: "scheduled", label: "ตามเวลาสอบจริง" },
                 { value: "now", label: "เริ่มทันที" },
-                { value: "scheduled", label: "ตั้งเวลาเริ่ม" },
               ]}
             />
             {settings.startMode === "scheduled" ? (
@@ -580,7 +673,8 @@ export function ExamTimer() {
                   ))}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  ระบบจะนับถอยหลังถึงเวลาเริ่ม แล้วเริ่มจับเวลาสอบให้อัตโนมัติ — ไม่ต้องกดตอนเริ่มสอบ
+                  ใส่เวลาเริ่มตามตารางสอบ — ถ้ายังไม่ถึงเวลา ระบบนับถอยหลังแล้วเริ่มให้อัตโนมัติ ถ้าเลยมาแล้วจะนับต่อจากเวลาจริง
+                  (เช่น สอบ 09:00–12:00 เปิดจอ 09:05 ก็ยังแสดง “รวม 3 ชั่วโมง”)
                 </p>
               </div>
             ) : null}
@@ -618,9 +712,8 @@ export function ExamTimer() {
             {preview ? (
               <p className="flex items-center gap-1.5 rounded-[var(--radius-control)] bg-brand-50 px-2.5 py-2 text-xs text-brand-900">
                 <Clock3 className="size-3.5 shrink-0" aria-hidden />
-                {settings.startMode === "scheduled" && preview.startAt > now
-                  ? `เริ่ม ${hhmm(preview.startAt)} → เลิก ${hhmm(preview.endAt)} · สอบ ${formatDurationThai(preview.endAt - preview.startAt)}`
-                  : `เหลือเวลาสอบ ${formatDurationThai(preview.endAt - now)} (ถึง ${hhmm(preview.endAt)} น.)`}
+                {`เวลาสอบ ${hhmm(preview.startAt)}–${hhmm(preview.endAt)} น. · รวม ${formatDurationThai(preview.endAt - preview.startAt)}`}
+                {preview.startAt < now ? ` · เหลือ ${formatDurationThai(preview.endAt - now)}` : ""}
               </p>
             ) : null}
             {error ? (
@@ -634,6 +727,31 @@ export function ExamTimer() {
             {session ? <RotateCcw aria-hidden /> : <Play aria-hidden />}
             {session ? "ตั้งเวลาใหม่" : "เริ่มจับเวลา"}
           </Button>
+
+          <div className="flex flex-col gap-3 border-t border-border pt-4">
+            <div>
+              <Label>กติกาห้องสอบ (แสดงบนจอ)</Label>
+              <p className="text-[11px] text-muted-foreground">ตามระเบียบการสอบของคณะ/สถาบัน — ปรับได้ตามแต่ละวิชา</p>
+            </div>
+            <RuleChips
+              label="เข้าห้องสอบได้ไม่เกิน (หลังเริ่มสอบ)"
+              options={LATE_ENTRY_OPTIONS}
+              value={settings.lateEntryMinutes}
+              onChange={(v) => update("lateEntryMinutes", v)}
+            />
+            <RuleChips
+              label="ออกจากห้องสอบได้หลังเริ่มสอบ"
+              options={EARLY_LEAVE_OPTIONS}
+              value={settings.earlyLeaveMinutes}
+              onChange={(v) => update("earlyLeaveMinutes", v)}
+            />
+            <RuleChips
+              label="งดออกจากห้องช่วงท้าย"
+              options={LAST_LEAVE_OPTIONS}
+              value={settings.lastLeaveMinutes}
+              onChange={(v) => update("lastLeaveMinutes", v)}
+            />
+          </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <div className="flex items-center justify-between gap-3">
@@ -744,5 +862,28 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+function RuleChips({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly number[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="w-full text-[11px] text-muted-foreground">{label}</span>
+      {options.map((m) => (
+        <Chip key={m} active={value === m} aria-pressed={value === m} onClick={() => onChange(m)}>
+          {m === 0 ? "ไม่กำหนด" : `${m} นาที`}
+        </Chip>
+      ))}
+    </div>
   );
 }

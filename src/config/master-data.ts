@@ -141,3 +141,29 @@ export const ROLES = [
   { id: "FINANCE", label: "Finance", description: "การเงิน — ดูเอกสารเบิกจ่ายและใบลงเวลา" },
   { id: "VIEWER", label: "Viewer", description: "ดูอย่างเดียว" },
 ] as const;
+
+export interface YearColor {
+  year: number;
+  /** What the academic office calls it. */
+  label: string;
+  /** Tint for chips and row backgrounds. */
+  bg: string;
+  /** Text on the tint. */
+  fg: string;
+  /** Solid accent (dots, bars, selected chip). */
+  solid: string;
+}
+
+/** Cohort colours used in the exam and teaching sheets. Year 6 opens next year; it takes the faculty's own purple (#4F0080). */
+export const YEAR_COLORS: YearColor[] = [
+  { year: 1, label: "ส้ม / พีช", bg: "#FFE8D6", fg: "#9A3412", solid: "#F4975A" },
+  { year: 2, label: "น้ำเงิน", bg: "#DBEAFE", fg: "#1E3A8A", solid: "#2563EB" },
+  { year: 3, label: "ชมพูแดงอ่อน", bg: "#FFE1E4", fg: "#9F1239", solid: "#F47C8A" },
+  { year: 4, label: "ชมพูเข้ม", bg: "#FCE4F1", fg: "#9D174D", solid: "#D61F7A" },
+  { year: 5, label: "เทาดำ", bg: "#E4E4E7", fg: "#18181B", solid: "#3F3F46" },
+  { year: 6, label: "ม่วงดอกบัวสุราษฎร์ (สีคณะ)", bg: "#EEE2F8", fg: "#4F0080", solid: "#4F0080" },
+];
+
+export function yearColor(year: number | null | undefined): YearColor | null {
+  return YEAR_COLORS.find((color) => color.year === year) ?? null;
+}
