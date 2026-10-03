@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { prepareDocxForLibreOffice, renderDocx } from "@/server/render-docx";
 import { SAMPLE_INVITATION } from "./sample";
 import { invitationSchema } from "./schema";
-import { buildInvitationTemplateData, invitationFileName } from "./template-data";
+import { buildInvitationTemplateData, invitationFileName, invitationProtectedWords } from "./template-data";
 
 function documentText(docx: Buffer): string {
   const xml = new PizZip(docx).file("word/document.xml")?.asText() ?? "";
@@ -139,6 +139,22 @@ describe("rendered .docx", () => {
   });
 });
 
+describe("exam points", () => {
+  it("lets a session override its points and leaves 0-point sessions (labs) out of the lecture hours", () => {
+    const [first, second] = SAMPLE_INVITATION.schedule;
+    const input = invitationSchema.parse({
+      ...SAMPLE_INVITATION,
+      schedule: [
+        { ...first!, examPoints: 12, examPointsEdited: true },
+        { ...second!, examPoints: 0, examPointsEdited: true },
+      ],
+    });
+    const data = buildInvitationTemplateData(input);
+    expect(data.totalHours).toBe("๓");
+    expect(data.totalPoints).toBe("๑๒");
+  });
+});
+
 describe("PDF preparation", () => {
   it("keeps Thai-distributed alignment in the .docx and maps it to justify for LibreOffice", () => {
     const template = readFileSync(join(process.cwd(), "templates", "invitation-letter.docx"));
@@ -148,5 +164,18 @@ describe("PDF preparation", () => {
     const forPdf = xml(prepareDocxForLibreOffice(docx));
     expect(forPdf).not.toContain("thaiDistribute");
     expect(forPdf).toContain('w:jc w:val="both"');
+  });
+
+  it("pre-breaks Thai text for LibreOffice so compound words and names never split", () => {
+    const template = readFileSync(join(process.cwd(), "templates", "invitation-letter.docx"));
+    const input = invitationSchema.parse(SAMPLE_INVITATION);
+    const docx = renderDocx(template, buildInvitationTemplateData(input));
+    const xml = new PizZip(prepareDocxForLibreOffice(docx, invitationProtectedWords(input))).file("word/document.xml")?.asText() ?? "";
+    const withBreaks = xml.replace(/\u2060/g, "");
+    expect(withBreaks).toContain("\u200B");
+    expect(xml.replace(/[\u2060\u200B]/g, "")).toContain("หลักสูตรทันตแพทยศาสตรบัณฑิต");
+    // contiguous once joiners are removed = no break opportunity (ZERO WIDTH SPACE) inside
+    for (const word of ["ทันตแพทยศาสตรบัณฑิต", "จันทรมณี", "ประสานงาน"]) expect(withBreaks).toContain(word);
+    expect(withBreaks).toContain("หลักสูตร\u200Bทันตแพทยศาสตรบัณฑิต");
   });
 });

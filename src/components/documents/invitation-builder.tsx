@@ -12,9 +12,9 @@ import {
   FileText,
   FileType2,
   Loader2,
+  Printer,
   RefreshCw,
   RotateCcw,
-  ServerOff,
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,16 @@ import {
   saveDraft,
 } from "@/lib/invitation/defaults";
 import { COORDINATOR_TITLES, invitationSchema, type DocumentFormat, type InvitationInput } from "@/lib/invitation/schema";
-import { totalScheduleHours } from "@/lib/invitation/template-data";
+import {
+  buildInvitationTemplateData,
+  examTotals,
+  invitationFileName,
+  invitationProtectedWords,
+  sessionExamPoints,
+  totalScheduleHours,
+} from "@/lib/invitation/template-data";
+import { useHealth } from "@/components/system/service-status";
+import { LetterPreview, LetterPrintRoot, letterPageCount, useAttachmentLayout } from "./letter/letter-document";
 import {
   formatFullThaiDate,
   formatHours,
@@ -46,6 +55,8 @@ import {
   formatScheduleDay,
   hoursBetween,
   parseIsoDate,
+  THAI_MONTHS,
+  toBuddhistYear,
   toThaiDigits,
 } from "@/lib/thai";
 import { cn } from "@/lib/utils";
@@ -59,7 +70,6 @@ type PreviewState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; blob: Blob; key: string; fileName: string }
-  | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
 const LECTURER_SUGGESTIONS = Array.from(new Set(COURSES_DATA.flatMap((c) => c.specialLecturers ?? []))).sort((a, b) =>
@@ -99,7 +109,10 @@ export function InvitationBuilder() {
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [busy, setBusy] = useState<DocumentFormat | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const autoPreviewRef = useRef(true);
+
+  // A PDF server (Gotenberg) is optional. Without one, preview, print and PDF all happen in the browser.
+  const health = useHealth();
+  const pdfMode: "server" | "browser" = health.data?.services.pdf.healthy ? "server" : "browser";
 
   // Restore the saved draft after mount (localStorage is client-only).
   useEffect(() => {
@@ -130,24 +143,24 @@ export function InvitationBuilder() {
       setPreview({ status: "ready", blob, key, fileName });
     } catch (error) {
       if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-      if (error instanceof DocumentApiError && (error.status === 503 || error.status === 502)) {
-        autoPreviewRef.current = false;
-        setPreview({ status: "unavailable", message: error.message });
-        return;
-      }
       setPreview({ status: "error", message: error instanceof Error ? error.message : "สร้างพรีวิวไม่สำเร็จ" });
     }
   }, []);
 
   // Auto-refresh the PDF preview shortly after the user stops typing (only when the form is valid).
   useEffect(() => {
-    if (!hydrated || !validation.success || !autoPreviewRef.current) return;
+    if (!hydrated || !validation.success || pdfMode !== "server") return;
     if (preview.status === "ready" && preview.key === valuesKey) return;
     const data = validation.data;
     const id = window.setTimeout(() => void runPreview(data, valuesKey), PREVIEW_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- preview is read only to skip duplicate work
-  }, [hydrated, valuesKey, validation, runPreview]);
+  }, [hydrated, valuesKey, validation, runPreview, pdfMode]);
+
+  // In-browser letter (same layout as the .docx): preview, printing and PDF without a server.
+  const letterData = useMemo(() => (validation.success ? buildInvitationTemplateData(validation.data) : null), [validation]);
+  const letterWords = useMemo(() => (validation.success ? invitationProtectedWords(validation.data) : []), [validation]);
+  const { layout: letterLayout, measurer } = useAttachmentLayout(letterData, letterWords);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -155,6 +168,20 @@ export function InvitationBuilder() {
     handleSubmit(
       async (data) => {
         const key = JSON.stringify(data);
+        if (format === "pdf" && pdfMode === "browser") {
+          setBusy("pdf");
+          try {
+            const { exportLetterPdf } = await import("./letter/export-pdf");
+            await exportLetterPdf(invitationFileName(data, "pdf"), `หนังสือเชิญอาจารย์พิเศษ ${data.courseName}`);
+            toast.success("ดาวน์โหลด PDF แล้ว", { description: invitationFileName(data, "pdf") });
+          } catch {
+            toast.info("สร้างไฟล์ PDF ในเบราว์เซอร์ไม่สำเร็จ — เปิดหน้าพิมพ์แทน เลือกปลายทาง “บันทึกเป็น PDF”");
+            window.print();
+          } finally {
+            setBusy(null);
+          }
+          return;
+        }
         if (format === "pdf" && preview.status === "ready" && preview.key === key) {
           saveBlob(preview.blob, preview.fileName);
           toast.success("ดาวน์โหลด PDF แล้ว");
@@ -178,8 +205,13 @@ export function InvitationBuilder() {
       },
     );
 
+  const printLetter = () =>
+    void handleSubmit(
+      () => window.setTimeout(() => window.print(), 50),
+      (formErrors) => toast.error("กรอกข้อมูลยังไม่ครบ", { description: firstError(formErrors) ?? undefined }),
+    )();
+
   const refreshPreview = () => {
-    autoPreviewRef.current = true;
     void handleSubmit(
       (data) => runPreview(data, JSON.stringify(data)),
       (formErrors) => toast.error("กรอกข้อมูลยังไม่ครบ", { description: firstError(formErrors) ?? undefined }),
@@ -211,11 +243,22 @@ export function InvitationBuilder() {
   };
 
   const th = values.thaiDigits !== false;
-  const totalHours = totalScheduleHours((values.schedule ?? []).filter((s) => Number.isFinite(s?.hours)));
+  const validRows = (values.schedule ?? []).filter((s) => Number.isFinite(s?.hours));
+  const totalHours = totalScheduleHours(validRows);
   const pointsPerHour = Number.isFinite(values.pointsPerHour) ? values.pointsPerHour : 0;
-  const issueDateText = parseIsoDate(values.issueDate ?? "")
-    ? formatLetterDate(values.issueDate, { includeDay: values.includeIssueDay, thaiDigits: th })
-    : "—";
+  const exam = examTotals(validRows, pointsPerHour);
+  const issue = parseIsoDate(values.issueDate ?? "");
+  const issueDateText = issue ? formatLetterDate(values.issueDate, { includeDay: values.includeIssueDay, thaiDigits: th }) : "—";
+  const daysInIssueMonth = issue ? new Date(Date.UTC(issue.year, issue.month, 0)).getUTCDate() : 31;
+  const setIssueDate = (parts: { year?: number; month?: number; day?: number }) => {
+    const current = issue ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 };
+    const year = parts.year ?? current.year;
+    const month = parts.month ?? current.month;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const day = Math.min(Math.max(1, parts.day ?? current.day), lastDay);
+    const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    setValue("issueDate", iso, { shouldValidate: true, shouldDirty: true });
+  };
 
   const previewStale = preview.status === "ready" && preview.key !== valuesKey;
 
@@ -247,19 +290,64 @@ export function InvitationBuilder() {
             >
               <Input id="letterNo" inputMode="numeric" placeholder="เว้นว่างได้ เช่น 311" aria-invalid={!!errors.letterNo} {...register("letterNo")} />
             </Field>
-            <Field label="วันที่ออกหนังสือ" htmlFor="issueDate" required error={errors.issueDate?.message} hint={`พิมพ์เป็น: ${issueDateText}`}>
-              <Input id="issueDate" type="date" aria-invalid={!!errors.issueDate} {...register("issueDate")} />
-            </Field>
-            <div className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-border px-3 py-2">
-              <div>
-                <Label htmlFor="includeIssueDay">ระบุวันที่ในหนังสือ</Label>
-                <p className="text-[11px] text-muted-foreground">ปิด = เว้นช่องวันที่ไว้ให้สารบรรณเติม</p>
+            <Field label="ลงวันที่ (เดือน / ปี พ.ศ.)" htmlFor="issueMonth" required error={errors.issueDate?.message} hint={`พิมพ์เป็น: ${issueDateText}`}>
+              <div className="grid grid-cols-[1fr_96px] gap-2">
+                <NativeSelect id="issueMonth" value={issue?.month ?? ""} onChange={(e) => setIssueDate({ month: Number(e.target.value) })} aria-label="เดือน">
+                  {THAI_MONTHS.map((name, i) => (
+                    <option key={name} value={i + 1}>
+                      {name}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="ปี พ.ศ."
+                  min={2560}
+                  max={2700}
+                  value={issue ? toBuddhistYear(issue.year) : ""}
+                  onChange={(e) => {
+                    const be = Number(e.target.value);
+                    if (be >= 2400 && be <= 2800) setIssueDate({ year: be - 543 });
+                  }}
+                />
               </div>
-              <Controller
-                control={control}
-                name="includeIssueDay"
-                render={({ field }) => <Switch id="includeIssueDay" checked={field.value} onCheckedChange={field.onChange} />}
-              />
+            </Field>
+            <div className="flex flex-col gap-2 rounded-[var(--radius-control)] border border-border px-3 py-2 sm:col-span-2">
+              <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 cursor-pointer accent-[var(--color-brand-600)]"
+                  checked={!values.includeIssueDay}
+                  onChange={(e) => setValue("includeIssueDay", !e.target.checked, { shouldDirty: true })}
+                />
+                <span>
+                  <span className="font-medium text-neutral-800">เว้นว่างวันที่ไว้ให้สารบรรณเขียนด้วยปากกา</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    หนังสือจะพิมพ์แค่เดือนและปี โดยเว้นที่ว่างด้านหน้าชื่อเดือนไว้เขียนเลขวันที่หลังเสนอเซ็น
+                  </span>
+                </span>
+              </label>
+              {values.includeIssueDay ? (
+                <div className="flex items-center gap-2 pl-6">
+                  <Label htmlFor="issueDay" className="text-[13px]">
+                    ระบุวันที่
+                  </Label>
+                  <Input
+                    id="issueDay"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={daysInIssueMonth}
+                    className="w-20"
+                    value={issue?.day ?? ""}
+                    onChange={(e) => {
+                      const day = Number(e.target.value);
+                      if (day >= 1) setIssueDate({ day });
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-border px-3 py-2">
               <div>
@@ -476,7 +564,7 @@ export function InvitationBuilder() {
           <CardHeader>
             <div>
               <CardTitle>4 · รายละเอียดการออกข้อสอบ</CardTitle>
-              <CardDescription>แสดงท้ายเอกสารแนบ — ปิดได้ถ้าอาจารย์ไม่ต้องออกข้อสอบ</CardDescription>
+              <CardDescription>รวมข้อความเกณฑ์การจัดทำข้อสอบในเอกสารแนบท้าย — ปิดได้ถ้าอาจารย์ไม่ต้องออกข้อสอบ</CardDescription>
             </div>
             <Controller
               control={control}
@@ -508,9 +596,94 @@ export function InvitationBuilder() {
               >
                 <Input id="examDeadline" type="date" aria-invalid={!!errors.examDeadline} {...register("examDeadline")} />
               </Field>
+              <div className="sm:col-span-2">
+                <p className="mb-1.5 text-xs text-muted-foreground">
+                  คะแนนข้อสอบแต่ละคาบ = ชั่วโมง × {formatHours(pointsPerHour, false)} (คำนวณให้อัตโนมัติ) · แก้เองได้ถ้าวิชามีเกณฑ์พิเศษ · ใส่ 0
+                  สำหรับคาบที่ไม่ใช่บรรยาย เช่น แล็บ
+                </p>
+                <div className="overflow-x-auto rounded-[var(--radius-control)] border border-border scrollbar-thin">
+                  <table className="w-full min-w-[520px] text-left text-[13px]">
+                    <thead className="bg-neutral-50 text-xs text-neutral-500">
+                      <tr className="h-8">
+                        <th scope="col" className="px-2.5 font-medium">วัน/ เวลา</th>
+                        <th scope="col" className="px-2.5 font-medium">หัวข้อการสอน</th>
+                        <th scope="col" className="px-2.5 text-right font-medium">ชั่วโมง</th>
+                        <th scope="col" className="w-32 px-2.5 text-right font-medium">คะแนนที่ต้องส่ง</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(values.schedule ?? []).map((row, index) => {
+                        const auto = Math.round((Number.isFinite(row?.hours) ? row.hours : 0) * pointsPerHour * 100) / 100;
+                        const points = row ? sessionExamPoints({ ...row, hours: Number.isFinite(row.hours) ? row.hours : 0 }, pointsPerHour) : 0;
+                        return (
+                          <tr key={row?.id ?? index} className="border-t border-border align-middle">
+                            <td className="px-2.5 py-1.5 text-xs whitespace-nowrap text-neutral-600">
+                              {parseIsoDate(row?.date ?? "") ? formatScheduleDay(row.date, false) : "—"}
+                              <span className="block tabular">
+                                {row?.startTime}–{row?.endTime}
+                              </span>
+                            </td>
+                            <td className="max-w-[220px] truncate px-2.5 py-1.5" title={row?.topic}>
+                              {row?.topic || <span className="text-neutral-400">(ยังไม่มีหัวข้อ)</span>}
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right tabular">{Number.isFinite(row?.hours) ? formatHours(row.hours, false) : "—"}</td>
+                            <td className="px-2.5 py-1.5">
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step={0.5}
+                                  aria-label={`คะแนนข้อสอบคาบที่ ${index + 1}`}
+                                  className={cn("h-7 w-20 text-right", row?.examPointsEdited && "border-brand-300 bg-brand-50")}
+                                  value={Number.isFinite(points) ? points : ""}
+                                  onChange={(e) => {
+                                    const n = e.target.value === "" ? 0 : Number(e.target.value);
+                                    if (!Number.isFinite(n) || n < 0) return;
+                                    setValue(`schedule.${index}.examPoints`, n, { shouldDirty: true });
+                                    setValue(`schedule.${index}.examPointsEdited`, true, { shouldDirty: true });
+                                  }}
+                                />
+                                {row?.examPointsEdited ? (
+                                  <button
+                                    type="button"
+                                    title={`คืนค่าอัตโนมัติ (${formatHours(auto, false)})`}
+                                    aria-label={`คืนค่าคะแนนอัตโนมัติคาบที่ ${index + 1}`}
+                                    className="cursor-pointer rounded p-0.5 text-neutral-400 hover:text-brand-700"
+                                    onClick={() => {
+                                      setValue(`schedule.${index}.examPoints`, undefined, { shouldDirty: true });
+                                      setValue(`schedule.${index}.examPointsEdited`, false, { shouldDirty: true });
+                                    }}
+                                  >
+                                    <RotateCcw className="size-3.5" aria-hidden />
+                                  </button>
+                                ) : (
+                                  <span className="w-[18px]" aria-hidden />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-border bg-neutral-50 font-medium">
+                        <td className="px-2.5 py-1.5" colSpan={2}>
+                          รวมชั่วโมงบรรยาย
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right tabular">{formatHours(exam.lectureHours, false)}</td>
+                        <td className="px-2.5 py-1.5 text-right tabular">
+                          {formatHours(exam.points, false)} คะแนน
+                          <span className="inline-block w-[22px]" aria-hidden />
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
               <p className="rounded-[var(--radius-control)] bg-neutral-50 px-3 py-2 text-xs text-neutral-700 sm:col-span-2">
-                ในเอกสาร: “กรณีสอนบรรยาย {formatHours(totalHours, th)} ชั่วโมง รบกวนขอ{" "}
-                {formatHours(Math.round(totalHours * pointsPerHour * 100) / 100, th)} คะแนน”
+                ในเอกสาร: “ข้อสอบรายวิชาบรรยาย คิดเป็น ({formatHours(pointsPerHour, th)} คะแนน/ {th ? "๑" : "1"} ชั่วโมงการสอน) กรณีสอนบรรยาย{" "}
+                {formatHours(exam.lectureHours, th)} ชั่วโมง รบกวนขอ {formatHours(exam.points, th)} คะแนน”
               </p>
             </CardContent>
           ) : null}
@@ -575,6 +748,9 @@ export function InvitationBuilder() {
             {busy === "pdf" ? <Loader2 className="animate-spin" aria-hidden /> : <FileType2 aria-hidden />}
             ดาวน์โหลด PDF
           </Button>
+          <Button variant="secondary" size="lg" onClick={printLetter}>
+            <Printer aria-hidden /> พิมพ์ / บันทึกเป็น PDF
+          </Button>
           <Button variant="ghost" size="lg" onClick={startNewLetter} className="ml-auto">
             <RotateCcw aria-hidden /> เริ่มฉบับใหม่
           </Button>
@@ -586,51 +762,54 @@ export function InvitationBuilder() {
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">พรีวิว PDF</p>
-              {preview.status === "ready" && pageCount ? <Badge>{pageCount} หน้า</Badge> : null}
-              {previewStale ? <Badge tone="warning">มีการแก้ไข</Badge> : null}
-              {preview.status === "loading" ? (
+              <p className="text-sm font-semibold">พรีวิว</p>
+              {pdfMode === "browser" && letterData ? <Badge>{letterPageCount(letterLayout, letterData.schedule.length)} หน้า</Badge> : null}
+              {pdfMode === "server" && preview.status === "ready" && pageCount ? <Badge>{pageCount} หน้า</Badge> : null}
+              {pdfMode === "server" && previewStale ? <Badge tone="warning">มีการแก้ไข</Badge> : null}
+              {pdfMode === "server" && preview.status === "loading" ? (
                 <Badge tone="info">
                   <Loader2 className="animate-spin" aria-hidden /> กำลังสร้าง…
                 </Badge>
               ) : null}
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={refreshPreview} aria-label="สร้างพรีวิวใหม่">
-                <RefreshCw aria-hidden /> อัปเดต
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                disabled={preview.status !== "ready"}
-                aria-label="ดาวน์โหลด PDF ที่แสดงอยู่"
-                onClick={() => {
-                  if (preview.status === "ready") saveBlob(preview.blob, preview.fileName);
-                }}
-              >
-                <FileDown aria-hidden />
-              </Button>
+              {pdfMode === "server" ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={refreshPreview} aria-label="สร้างพรีวิวใหม่">
+                    <RefreshCw aria-hidden /> อัปเดต
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={preview.status !== "ready"}
+                    aria-label="ดาวน์โหลด PDF ที่แสดงอยู่"
+                    onClick={() => {
+                      if (preview.status === "ready") saveBlob(preview.blob, preview.fileName);
+                    }}
+                  >
+                    <FileDown aria-hidden />
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={printLetter} disabled={!letterData} aria-label="พิมพ์หนังสือ">
+                  <Printer aria-hidden /> พิมพ์
+                </Button>
+              )}
             </div>
           </div>
-          <div className={cn("max-h-[calc(100dvh-170px)] overflow-y-auto bg-neutral-100 p-4 scrollbar-thin", previewStale && "opacity-70")}>
-            {preview.status === "ready" ? (
+          <div
+            className={cn(
+              "max-h-[calc(100dvh-170px)] overflow-y-auto bg-neutral-100 p-4 scrollbar-thin",
+              pdfMode === "server" && previewStale && "opacity-70",
+            )}
+          >
+            {pdfMode === "browser" && letterData ? (
+              <LetterPreview data={letterData} protectedWords={letterWords} layout={letterLayout} />
+            ) : pdfMode === "server" && preview.status === "ready" ? (
               <PdfViewer file={preview.blob} onPages={setPageCount} />
-            ) : preview.status === "loading" ? (
+            ) : pdfMode === "server" && preview.status === "loading" ? (
               <Skeleton className="aspect-[1/1.414] w-full bg-neutral-200" />
-            ) : preview.status === "unavailable" ? (
-              <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-                <ServerOff className="size-8 text-neutral-400" aria-hidden />
-                <p className="text-sm font-medium text-neutral-800">ยังไม่ได้เชื่อมต่อบริการแปลง PDF</p>
-                <p className="max-w-xs text-xs text-muted-foreground">
-                  {preview.message}
-                  <br />
-                  พรีวิวต้องมาจาก PDF จริงเท่านั้น เพื่อให้ตรงกับไฟล์ที่ดาวน์โหลด — ระหว่างนี้ดาวน์โหลด .docx ได้ตามปกติ
-                </p>
-                <Button variant="secondary" size="sm" onClick={refreshPreview}>
-                  <RefreshCw aria-hidden /> ลองใหม่
-                </Button>
-              </div>
-            ) : preview.status === "error" ? (
+            ) : pdfMode === "server" && preview.status === "error" ? (
               <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
                 <p className="text-sm font-medium text-danger">{preview.message}</p>
                 <Button variant="secondary" size="sm" onClick={refreshPreview}>
@@ -649,6 +828,8 @@ export function InvitationBuilder() {
           </div>
         </Card>
       </aside>
+      {letterData ? <LetterPrintRoot data={letterData} protectedWords={letterWords} layout={letterLayout} /> : null}
+      {measurer}
     </div>
   );
 }

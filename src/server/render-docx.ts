@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
+import { joinProtected } from "@/lib/thai-wrap";
 
 export class TemplateRenderError extends Error {
   constructor(
@@ -56,15 +57,24 @@ export function renderDocx(template: Buffer, data: object): Buffer {
 }
 
 /**
- * LibreOffice (used by Gotenberg) does not implement Word's "Thai distributed" alignment and
- * falls back to ragged-right. For PDF conversion only, map it to regular justification, which
- * LibreOffice applies at Thai word boundaries — both edges stay flush like an official letter.
- * The .docx handed to users keeps "thaiDistribute", exactly like the faculty's original.
+ * Adjusts the rendered .docx for LibreOffice (used by Gotenberg) before PDF conversion:
+ *  • LibreOffice does not implement Word's "Thai distributed" alignment and falls back to ragged-right.
+ *    Map it to regular justification, which LibreOffice applies at Thai word boundaries.
+ *  • LibreOffice breaks Thai with the ICU dictionary, which splits compound words and names
+ *    ("ทันตแพทย|ศาสตรบัณฑิต"). Word joiners inside protected words forbid those breaks.
+ * The .docx handed to users is untouched — it keeps "thaiDistribute", exactly like the faculty's original.
  */
-export function prepareDocxForLibreOffice(docx: Buffer): Buffer {
+export function prepareDocxForLibreOffice(docx: Buffer, protectedWords: readonly string[] = []): Buffer {
   const zip = new PizZip(docx);
-  const file = zip.file("word/document.xml");
-  if (!file) return docx;
-  zip.file("word/document.xml", file.asText().replace(/w:val="thaiDistribute"/g, 'w:val="both"'));
+  for (const name of Object.keys(zip.files)) {
+    if (!/^word\/(document|header\d*|footer\d*)\.xml$/.test(name)) continue;
+    const file = zip.file(name);
+    if (!file) continue;
+    const xml = file
+      .asText()
+      .replace(/w:val="thaiDistribute"/g, 'w:val="both"')
+      .replace(/(<w:t(?:\s[^>]*)?>)([^<]*)(<\/w:t>)/g, (_, open: string, text: string, close: string) => open + joinProtected(text, protectedWords) + close);
+    zip.file(name, xml);
+  }
   return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
 }

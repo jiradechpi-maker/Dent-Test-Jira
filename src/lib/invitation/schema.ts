@@ -24,6 +24,10 @@ export const scheduleItemSchema = z
     endTime: time,
     topic: z.string().trim().min(1, "กรุณากรอกหัวข้อการสอน").max(500, "หัวข้อยาวเกินไป"),
     hours: z.number({ message: "กรุณากรอกจำนวนชั่วโมง" }).positive("จำนวนชั่วโมงต้องมากกว่า 0").max(24, "จำนวนชั่วโมงไม่ถูกต้อง"),
+    /** Exam points this session asks for; absent = hours × points-per-hour. 0 = not a lecture (e.g. a lab). */
+    examPoints: z.number({ message: "กรุณากรอกคะแนน" }).min(0, "คะแนนติดลบไม่ได้").max(500, "คะแนนมากเกินไป").optional(),
+    /** true once the user typed their own points, so changing the hours no longer recalculates them. */
+    examPointsEdited: z.boolean().optional(),
   })
   .superRefine((item, ctx) => {
     const start = timeToMinutes(item.startTime);

@@ -51,9 +51,10 @@ export function ServiceStatusList() {
     { name: "เว็บแอปพลิเคชัน", ok: health.data.ok, text: "ทำงานปกติ" },
     { name: "สร้างไฟล์ Word (.docx)", ok: true, text: "พร้อมใช้งาน" },
     {
-      name: "แปลง PDF (Gotenberg)",
-      ok: pdf.healthy,
-      text: pdf.healthy ? "พร้อมใช้งาน" : pdf.configured ? "เชื่อมต่อไม่ได้" : "ยังไม่ได้ตั้งค่า",
+      name: "สร้าง PDF / สั่งพิมพ์",
+      // Without a PDF server, letters are rendered, printed and saved as PDF in the browser.
+      ok: true,
+      text: pdf.healthy ? "พร้อมใช้งาน (เซิร์ฟเวอร์)" : pdf.configured ? "พร้อมใช้งาน (ในเบราว์เซอร์ — เซิร์ฟเวอร์ PDF ติดต่อไม่ได้)" : "พร้อมใช้งาน (ในเบราว์เซอร์)",
     },
   ];
 
