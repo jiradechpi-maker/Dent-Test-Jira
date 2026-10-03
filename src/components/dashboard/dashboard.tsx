@@ -92,7 +92,7 @@ const QUICK_ACTIONS = [
     href: "/exam-timer",
     icon: Timer,
     title: bi("นาฬิกาจับเวลาสอบ", "Exam timer"),
-    description: bi("ใส่เวลาสอบจริง แสดงเต็มจอ พร้อมประกาศเสียงเมื่อเหลือ 5 นาที", "Full-screen exam countdown with a spoken 5-minute warning"),
+    description: bi("ใส่เวลาสอบจริง แสดงเต็มจอ พร้อมข้อปฏิบัติก่อนสอบและเตือนเมื่อเหลือ 5 นาที", "Full-screen exam countdown with the exam rules and a 5-minute warning"),
   },
 ];
 

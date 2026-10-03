@@ -1,147 +1,97 @@
 /**
- * Exam-room door rules shown on the projector: until when latecomers may enter, from when candidates may leave,
- * and the quiet final minutes when nobody leaves. Almost every institution closes late entry 30 minutes in;
- * they differ on the earliest leaving time (30, 45 or 60 minutes) and on a final no-leaving window (10 or 15).
+ * Exam-room door rules shown on the projector: how late a candidate may still come in, and from when candidates
+ * may leave. The defaults follow the institute's examination regulation (ข้อ ๒): no entry more than 30 minutes
+ * after the start, and no leaving in the first hour. Lecturers often choose stricter or shorter rules, so each
+ * rule is a short list of choices.
  */
 
 import type { Bi } from "@/lib/i18n/locale";
 import { formatClock, phaseAt, type ExamSession } from "./timing";
 
 export interface RoomRules {
-  /** Candidates may enter until this many minutes after the start (0 = no rule). */
+  /** Candidates may come in up to this many minutes after the start (0 = no late entry). */
   lateEntryMinutes: number;
-  /** Candidates may leave only after this many minutes (0 = no rule). */
+  /** Candidates may leave only after this many minutes. */
   earlyLeaveMinutes: number;
-  /** Candidates may not leave in the last N minutes (0 = no rule). */
-  lastLeaveMinutes: number;
 }
 
-export type RulePresetId = "international" | "kmitl" | "chula" | "uk-hk" | "none" | "custom";
+export const LATE_ENTRY_CHOICES = [0, 15, 30] as const;
+export const EARLY_LEAVE_CHOICES = [30, 60] as const;
 
-export interface RulePreset {
-  id: Exclude<RulePresetId, "custom">;
-  name: Bi;
-  rules: RoomRules;
-  /** Where the numbers come from. */
-  source: Bi;
+/** ข้อบังคับสถาบัน ข้อ ๒: late by at most 30 minutes; nobody leaves in the first hour. */
+export const REGULATION_RULES: RoomRules = { lateEntryMinutes: 30, earlyLeaveMinutes: 60 };
+
+export function normalizeRules(value: unknown): RoomRules {
+  const v = (typeof value === "object" && value !== null ? value : {}) as Partial<RoomRules>;
+  const pick = (n: unknown, choices: readonly number[], fallback: number) => (typeof n === "number" && choices.includes(n) ? n : fallback);
+  return {
+    lateEntryMinutes: pick(v.lateEntryMinutes, LATE_ENTRY_CHOICES, REGULATION_RULES.lateEntryMinutes),
+    earlyLeaveMinutes: pick(v.earlyLeaveMinutes, EARLY_LEAVE_CHOICES, REGULATION_RULES.earlyLeaveMinutes),
+  };
 }
 
-export const RULE_PRESETS: RulePreset[] = [
-  {
-    id: "international",
-    name: { th: "มาตรฐานสากล", en: "International standard" },
-    rules: { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 15 },
-    source: { th: "แบบ IB (International Baccalaureate)", en: "As used by the IB" },
-  },
-  {
-    id: "kmitl",
-    name: { th: "แบบ สจล.", en: "KMITL style" },
-    rules: { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 0 },
-    source: { th: "ระเบียบการสอบ คณะวิศวกรรมศาสตร์ สจล.", en: "KMITL Faculty of Engineering exam rules" },
-  },
-  {
-    id: "chula",
-    name: { th: "แบบมหาวิทยาลัยไทย", en: "Thai university style" },
-    rules: { lateEntryMinutes: 30, earlyLeaveMinutes: 45, lastLeaveMinutes: 0 },
-    source: { th: "ระเบียบการสอบ จุฬาลงกรณ์มหาวิทยาลัย", en: "Chulalongkorn University exam rules" },
-  },
-  {
-    id: "uk-hk",
-    name: { th: "แบบอังกฤษ / ฮ่องกง", en: "UK / Hong Kong style" },
-    rules: { lateEntryMinutes: 30, earlyLeaveMinutes: 30, lastLeaveMinutes: 15 },
-    source: { th: "University of Bristol, CUHK", en: "University of Bristol, CUHK" },
-  },
-  {
-    id: "none",
-    name: { th: "ไม่แสดงกติกา", en: "No rules on screen" },
-    rules: { lateEntryMinutes: 0, earlyLeaveMinutes: 0, lastLeaveMinutes: 0 },
-    source: { th: "", en: "" },
-  },
-];
+const minutesBi = (minutes: number): Bi =>
+  minutes === 60 ? { th: "1 ชั่วโมง", en: "1 hour" } : { th: `${minutes} นาที`, en: `${minutes} minutes` };
 
-export const DEFAULT_RULE_PRESET: RulePresetId = "international";
-
-export const LATE_ENTRY_OPTIONS = [0, 15, 30, 45, 60] as const;
-export const EARLY_LEAVE_OPTIONS = [0, 30, 45, 60] as const;
-export const LAST_LEAVE_OPTIONS = [0, 10, 15] as const;
-
-export function rulesFor(preset: RulePresetId, custom: RoomRules): RoomRules {
-  if (preset === "custom") return custom;
-  return (RULE_PRESETS.find((p) => p.id === preset) ?? RULE_PRESETS[0]!).rules;
-}
-
-/** "เข้าห้องได้ภายใน 30 นาทีแรก · ออกได้หลัง 60 นาที · งดออก 15 นาทีสุดท้าย" */
+/** "เข้าห้องสอบสายได้ไม่เกิน 30 นาที · ออกจากห้องสอบได้เมื่อสอบไปแล้ว 1 ชั่วโมง" */
 export function describeRules(rules: RoomRules): Bi {
-  const th: string[] = [];
-  const en: string[] = [];
-  if (rules.lateEntryMinutes) {
-    th.push(`เข้าห้องได้ภายใน ${rules.lateEntryMinutes} นาทีแรก`);
-    en.push(`late entry up to ${rules.lateEntryMinutes} min`);
-  }
-  if (rules.earlyLeaveMinutes) {
-    th.push(`ออกได้หลัง ${rules.earlyLeaveMinutes} นาที`);
-    en.push(`leave after ${rules.earlyLeaveMinutes} min`);
-  }
-  if (rules.lastLeaveMinutes) {
-    th.push(`งดออก ${rules.lastLeaveMinutes} นาทีสุดท้าย`);
-    en.push(`no leaving in the final ${rules.lastLeaveMinutes} min`);
-  }
-  if (!th.length) return { th: "ไม่แสดงกติกาบนจอ", en: "No rules on screen" };
-  const enText = en.join(" · ");
-  return { th: th.join(" · "), en: enText.charAt(0).toUpperCase() + enText.slice(1) };
+  const leave = minutesBi(rules.earlyLeaveMinutes);
+  const entry: Bi =
+    rules.lateEntryMinutes === 0
+      ? { th: "ไม่อนุญาตให้เข้าห้องสอบสาย", en: "No late entry" }
+      : { th: `เข้าห้องสอบสายได้ไม่เกิน ${rules.lateEntryMinutes} นาที`, en: `Late entry up to ${rules.lateEntryMinutes} minutes` };
+  return {
+    th: `${entry.th} · ออกจากห้องสอบได้เมื่อสอบไปแล้ว ${leave.th}`,
+    en: `${entry.en} · you may leave after ${leave.en}`,
+  };
+}
+
+export function isRegulation(rules: RoomRules): boolean {
+  return rules.lateEntryMinutes === REGULATION_RULES.lateEntryMinutes && rules.earlyLeaveMinutes === REGULATION_RULES.earlyLeaveMinutes;
 }
 
 export interface RoomNotice {
-  key: "entry" | "leave" | "last";
+  key: "entry" | "leave";
   text: Bi;
   /** "open" = allowed now, "closed" = not allowed now, "info" = before the exam starts. */
   state: "open" | "closed" | "info";
 }
 
 /**
- * The door rules, worded for the current moment, in Thai and English. Whether a rule fits the exam is judged on
- * the planned length, so a "+5 นาที" extension never makes a notice appear half-way through.
+ * The door rules, worded for the current moment, in Thai and English. The rules count from the start, so they
+ * hold whatever the finish time; an extension can only open a leaving window that the original finish had none of.
  */
 export function roomNotices(session: ExamSession, now: number, rules: RoomRules): RoomNotice[] {
   const phase = phaseAt(session, now);
   if (phase === "ended") return [];
   const notices: RoomNotice[] = [];
   const minute = 60_000;
-  const plannedEnd = session.plannedEndAt ?? session.endAt;
-  const plannedTotal = plannedEnd - session.startAt;
+  const start = formatClock(session.startAt);
 
-  if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * minute < plannedTotal) {
-    const until = formatClock(session.startAt + rules.lateEntryMinutes * minute);
+  if (rules.lateEntryMinutes === 0) {
+    notices.push(
+      phase === "waiting"
+        ? { key: "entry", state: "info", text: { th: `เข้าห้องสอบก่อน ${start} น. · ไม่อนุญาตให้เข้าสาย`, en: `Be seated by ${start} · no late entry` } }
+        : { key: "entry", state: "closed", text: { th: `ปิดรับเข้าห้องสอบแล้ว (${start} น.)`, en: `Entry closed (${start})` } },
+    );
+  } else if (session.startAt + rules.lateEntryMinutes * minute < session.endAt) {
+    const closesAt = session.startAt + rules.lateEntryMinutes * minute;
+    const until = formatClock(closesAt);
     const openText = { th: `เข้าห้องสอบได้ถึง ${until} น.`, en: `Late entry until ${until}` };
     if (phase === "waiting") notices.push({ key: "entry", state: "info", text: openText });
-    else if (now < session.startAt + rules.lateEntryMinutes * minute) notices.push({ key: "entry", state: "open", text: openText });
+    else if (now < closesAt) notices.push({ key: "entry", state: "open", text: openText });
     else notices.push({ key: "entry", state: "closed", text: { th: `ปิดรับเข้าห้องสอบแล้ว (${until} น.)`, en: `Entry closed (${until})` } });
   }
 
-  const lastFits = rules.lastLeaveMinutes > 0 && rules.lastLeaveMinutes * minute < plannedTotal;
   const leaveFrom = session.startAt + rules.earlyLeaveMinutes * minute;
-  const leaveUntil = lastFits ? session.endAt - rules.lastLeaveMinutes * minute : session.endAt;
-  const plannedLeaveUntil = lastFits ? plannedEnd - rules.lastLeaveMinutes * minute : plannedEnd;
-
-  if (rules.earlyLeaveMinutes > 0 && leaveFrom >= plannedLeaveUntil) {
-    // e.g. a 1-hour exam with "leave after 60 min": there is no time when leaving is allowed.
-    const text = { th: "ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ", en: "No leaving until the exam ends" };
-    notices.push({ key: "leave", state: phase === "waiting" ? "info" : "closed", text });
-    return notices;
-  }
-  if (rules.earlyLeaveMinutes > 0) {
+  if (leaveFrom >= session.endAt) {
+    // e.g. a 1-hour exam under the regulation: there is no time when leaving is allowed.
+    notices.push({ key: "leave", state: phase === "waiting" ? "info" : "closed", text: { th: "ออกจากห้องสอบไม่ได้จนหมดเวลาสอบ", en: "No leaving until the exam ends" } });
+  } else {
     const from = formatClock(leaveFrom);
     if (phase === "waiting") notices.push({ key: "leave", state: "info", text: { th: `ออกจากห้องสอบได้ตั้งแต่ ${from} น.`, en: `You may leave from ${from}` } });
     else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: { th: `ยังออกจากห้องสอบไม่ได้ จนถึง ${from} น.`, en: `No leaving until ${from}` } });
-    else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: { th: "ออกจากห้องสอบได้แล้ว", en: "You may now leave" } });
-  }
-  if (lastFits) {
-    const m = rules.lastLeaveMinutes;
-    if (phase === "running" && now >= leaveUntil) {
-      notices.push({ key: "last", state: "closed", text: { th: `${m} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา`, en: `Final ${m} minutes — please remain seated` } });
-    } else if (phase === "waiting") {
-      notices.push({ key: "last", state: "info", text: { th: `งดออกจากห้อง ${m} นาทีสุดท้าย`, en: `No leaving in the final ${m} minutes` } });
-    }
+    else notices.push({ key: "leave", state: "open", text: { th: "ออกจากห้องสอบได้แล้ว", en: "You may now leave" } });
   }
   return notices;
 }

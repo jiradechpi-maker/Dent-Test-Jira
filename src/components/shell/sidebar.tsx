@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronsRight, Search } from "lucide-react";
@@ -10,6 +9,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useT } from "@/components/i18n/locale-provider";
+import { DentboardMark } from "@/components/brand/dentboard-mark";
 
 function NavLink({ item, active, collapsed, onNavigate }: { item: NavItem; active: boolean; collapsed: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
@@ -50,17 +50,27 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
 
   return (
     <div className="flex h-full flex-col">
-      <div className={cn("flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
-        <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-white/30">
-          <Image src="/brand/kmitl-emblem.jpeg" alt={t("ตรา สจล.", "KMITL emblem")} width={28} height={28} priority />
+      <Link
+        href="/"
+        onClick={onNavigate}
+        aria-label={collapsed ? t("Dentboard — หน้าแรก", "Dentboard — home") : undefined}
+        className={cn(
+          "group/brand flex h-[var(--spacing-topbar)] shrink-0 items-center gap-3 px-4 outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(255,255,255,.45)]",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-white shadow-[0_3px_10px_rgba(18,0,38,.35)] ring-1 ring-white/50 transition-transform duration-200 group-hover/brand:-rotate-6">
+          <DentboardMark className="h-[23px] w-auto" />
         </span>
         {!collapsed && (
-          <div className="min-w-0 leading-tight">
-            <p className="font-[family-name:var(--font-latin)] text-[13px] font-semibold tracking-tight text-white">Dentboard</p>
-            <p className="truncate text-[10.5px] text-white/60">{t("คณะทันตแพทยศาสตร์ สจล.", "Faculty of Dentistry, KMITL")}</p>
-          </div>
+          <span className="min-w-0 leading-tight">
+            <span className="block font-[family-name:var(--font-latin)] text-[16px] font-bold tracking-[-0.015em] text-white">
+              Dent<span className="font-medium text-white/75">board</span>
+            </span>
+            <span className="mt-px block truncate text-[11px] text-white/60">{t("คณะทันตแพทยศาสตร์ สจล.", "Faculty of Dentistry, KMITL")}</span>
+          </span>
         )}
-      </div>
+      </Link>
 
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
         <button

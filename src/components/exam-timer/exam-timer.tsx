@@ -2,14 +2,35 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BellRing, CalendarClock, Clock3, Maximize, Minimize, Moon, Play, Plus, RotateCcw, Square, Sun, Volume2, VolumeX, Wifi, WifiOff } from "lucide-react";
+import {
+  BellRing,
+  Calculator,
+  CalendarClock,
+  Clock3,
+  Maximize,
+  Minimize,
+  Moon,
+  Play,
+  Plus,
+  Printer,
+  RotateCcw,
+  ScrollText,
+  Square,
+  Sun,
+  Volume2,
+  VolumeX,
+  Wifi,
+  WifiOff,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input, NativeSelect } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { todayInBangkok } from "@/lib/thai";
 import { useScheduleBundle } from "@/components/schedule/use-schedule";
@@ -27,22 +48,21 @@ import {
   type ExamSession,
   type SessionError,
 } from "@/lib/exam-timer/timing";
-import { isAudioReady, playChime, playSound, setVolume, unlockAudio, type ChimeStyle, type ExamSound } from "@/lib/exam-timer/sounds";
-import { primeSpeech } from "@/lib/exam-timer/speech";
+import { playSound, setVolume, unlockAudio, type ExamSound } from "@/lib/exam-timer/sounds";
 import {
-  DEFAULT_RULE_PRESET,
-  EARLY_LEAVE_OPTIONS,
-  LAST_LEAVE_OPTIONS,
-  LATE_ENTRY_OPTIONS,
-  RULE_PRESETS,
+  EARLY_LEAVE_CHOICES,
+  LATE_ENTRY_CHOICES,
+  REGULATION_RULES,
   describeRules,
-  rulesFor,
+  isRegulation,
+  normalizeRules,
   type RoomRules,
-  type RulePresetId,
 } from "@/lib/exam-timer/room-rules";
+import { DEFAULT_STUDENT_RULES, normalizeStudentRules, studentRuleCards, type StudentRulesSettings } from "@/lib/exam-timer/student-rules";
 import { TimerDisplay, type DisplayTheme } from "./timer-display";
 import { DEFAULT_ANNOUNCE, normalizeAnnounce, useAnnouncer, type AnnounceSettings } from "./use-announcer";
 import { SoundSettings } from "./sound-settings";
+import { ExamNoticePrint } from "./exam-notice-print";
 import { useServerClock } from "./use-server-clock";
 
 const STORAGE_KEY = "dentops.examTimer.v4";
@@ -56,13 +76,10 @@ interface TimerSettings {
   sound: boolean;
   volume: number;
   theme: DisplayTheme;
-  rulesPreset: RulePresetId;
-  /** Used when rulesPreset is "custom". */
-  customRules: RoomRules;
+  rules: RoomRules;
+  studentRules: StudentRulesSettings;
   announce: AnnounceSettings;
 }
-
-const PRESET_IDS: readonly RulePresetId[] = [...RULE_PRESETS.map((p) => p.id), "custom"];
 
 const DEFAULT_SETTINGS: TimerSettings = {
   title: "",
@@ -72,47 +89,10 @@ const DEFAULT_SETTINGS: TimerSettings = {
   sound: true,
   volume: 0.85,
   theme: "dark",
-  rulesPreset: DEFAULT_RULE_PRESET,
-  customRules: { lateEntryMinutes: 30, earlyLeaveMinutes: 60, lastLeaveMinutes: 15 },
+  rules: REGULATION_RULES,
+  studentRules: DEFAULT_STUDENT_RULES,
   announce: DEFAULT_ANNOUNCE,
 };
-
-const minutesIn = (value: unknown, options: readonly number[], fallback: number) =>
-  typeof value === "number" && options.includes(value) ? value : fallback;
-
-/** Rules saved by an earlier version as three numbers: use the matching preset, otherwise "custom". */
-function storedRules(raw: Record<string, unknown>): Pick<TimerSettings, "rulesPreset" | "customRules"> {
-  const custom = (raw.customRules ?? raw) as Record<string, unknown>;
-  const customRules: RoomRules = {
-    lateEntryMinutes: minutesIn(custom.lateEntryMinutes, LATE_ENTRY_OPTIONS, DEFAULT_SETTINGS.customRules.lateEntryMinutes),
-    earlyLeaveMinutes: minutesIn(custom.earlyLeaveMinutes, EARLY_LEAVE_OPTIONS, DEFAULT_SETTINGS.customRules.earlyLeaveMinutes),
-    lastLeaveMinutes: minutesIn(custom.lastLeaveMinutes, LAST_LEAVE_OPTIONS, DEFAULT_SETTINGS.customRules.lastLeaveMinutes),
-  };
-  if (PRESET_IDS.includes(raw.rulesPreset as RulePresetId)) return { rulesPreset: raw.rulesPreset as RulePresetId, customRules };
-  if (typeof raw.lateEntryMinutes !== "number") return { rulesPreset: DEFAULT_RULE_PRESET, customRules };
-  const match = RULE_PRESETS.find(
-    (p) =>
-      p.rules.lateEntryMinutes === customRules.lateEntryMinutes &&
-      p.rules.earlyLeaveMinutes === customRules.earlyLeaveMinutes &&
-      p.rules.lastLeaveMinutes === customRules.lastLeaveMinutes,
-  );
-  return { rulesPreset: match?.id ?? "custom", customRules };
-}
-
-const hasRules = (raw: Record<string, unknown>) => typeof raw.rulesPreset === "string" || typeof raw.lateEntryMinutes === "number";
-
-/** The previous build saved its settings without room rules; the rules saved before that are still in an older key. */
-function legacyRules(): Record<string, unknown> | null {
-  for (const key of LEGACY_STORAGE_KEYS) {
-    try {
-      const raw = (JSON.parse(window.localStorage.getItem(key) ?? "null") as { settings?: Record<string, unknown> } | null)?.settings;
-      if (raw && hasRules(raw)) return raw;
-    } catch {
-      // A damaged old entry is simply skipped.
-    }
-  }
-  return null;
-}
 
 interface StoredState {
   settings: TimerSettings;
@@ -145,13 +125,13 @@ function isValidSession(value: unknown): value is ExamSession {
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
-/** Settings saved by earlier versions: keep the exam details and the chosen voice, start the sound options fresh. */
+/** Settings saved by earlier versions: keep the exam details, start the sound options fresh. */
 function legacyAnnounce(raw: Record<string, unknown>): AnnounceSettings {
-  const voice = (raw.voice ?? {}) as { thVoice?: unknown; enabled?: unknown };
+  const voice = (raw.voice ?? {}) as { enabled?: unknown };
   const warnings = Array.isArray(raw.warnings) ? (raw.warnings as unknown[]) : null;
-  // A room that had switched speech off keeps it off.
+  // A room that had switched the 5-minute warning off keeps it off.
   const fiveMinutes = voice.enabled !== false && (warnings ? warnings.includes(5) : true);
-  return normalizeAnnounce({ fiveMinutes, voiceUri: text(voice.thVoice) });
+  return normalizeAnnounce({ fiveMinutes });
 }
 
 function readStored(today: string): StoredState | null {
@@ -170,7 +150,9 @@ function readStored(today: string): StoredState | null {
       sound: typeof raw.sound === "boolean" ? raw.sound : true,
       volume: typeof raw.volume === "number" && raw.volume >= MIN_VOLUME && raw.volume <= 1 ? raw.volume : DEFAULT_SETTINGS.volume,
       theme: raw.theme === "light" ? "light" : "dark",
-      ...storedRules(hasRules(raw) ? raw : (legacyRules() ?? raw)),
+      // Rules saved by the versions with presets are not carried over: the choices changed, the regulation is the default.
+      rules: normalizeRules(raw.rules),
+      studentRules: normalizeStudentRules(raw.studentRules),
       announce: key === STORAGE_KEY ? normalizeAnnounce(raw.announce) : legacyAnnounce(raw),
     };
     return { settings, session: isValidSession(parsed.session) ? parsed.session : null };
@@ -253,10 +235,7 @@ export function ExamTimer() {
     setVolume(settings.sound ? settings.volume : 0);
   }, [settings.sound, settings.volume, audioReady]);
 
-  const { silence } = announcer;
-  useEffect(() => {
-    if (!settings.sound) silence({ keepCaption: true });
-  }, [settings.sound, silence]);
+  const { dismiss } = announcer;
 
   const play = useCallback((kind: ExamSound) => {
     if (!settingsRef.current.sound) return;
@@ -292,8 +271,9 @@ export function ExamTimer() {
         if (crossedThresholds(active, prev, current, [ANNOUNCE_AT_MINUTES]).length > 0 && firstTime(`m5@${active.createdAt}@${active.endAt}`)) {
           toast.warning(tr("เหลือเวลาสอบอีก 5 นาที", "5 minutes remaining"));
           if (s.announce.fiveMinutes) {
-            void announceRef.current({ settings: s.announce, volume: s.volume, sound: s.sound, caption: true });
-            if (s.sound && !isAudioReady()) setAudioReady(false);
+            void announceRef.current({ settings: s.announce, sound: s.sound, showForMs: 60_000 }).then((ok) => {
+              if (!ok) setAudioReady(false);
+            });
           }
         }
         if (didEnd(active, prev, current) && firstTime(`end@${active.createdAt}@${active.endAt}`)) {
@@ -324,7 +304,6 @@ export function ExamTimer() {
   const fullscreen = isFullscreen || pseudoFullscreen;
 
   const ensureAudio = useCallback(async () => {
-    primeSpeech();
     const ok = await unlockAudio();
     setVolume(settingsRef.current.sound ? settingsRef.current.volume : 0);
     setAudioReady(ok);
@@ -444,8 +423,8 @@ export function ExamTimer() {
       return;
     }
     const next = result.session;
-    // A new session replaces the old one completely, including its announcement on screen.
-    if (sessionRef.current) silence();
+    // A new session replaces the old one completely, including a warning still on screen.
+    if (sessionRef.current) dismiss();
     prevNowRef.current = current;
     sessionRef.current = next;
     setSession(next);
@@ -469,7 +448,7 @@ export function ExamTimer() {
 
   const stop = () => {
     setSession(null);
-    silence();
+    dismiss();
     toast(t("หยุดจับเวลาแล้ว", "Timer stopped"));
   };
 
@@ -487,16 +466,16 @@ export function ExamTimer() {
     phase !== "running" ||
     window.confirm(t("การสอบกำลังดำเนินอยู่ เสียงทดลองจะดังในห้องสอบทันที ต้องการเล่นหรือไม่?", "An exam is running — the whole room will hear this now. Play it?"));
 
-  const testAnnouncement = async () => {
+  /** The chime and the words on the screen for a few seconds, exactly as at 5 minutes left. */
+  const testWarning = async () => {
     if (!confirmLive()) return;
     await ensureAudio();
-    void announcer.announce({ settings: settings.announce, volume: settings.volume, sound: true, caption: phase === "running" });
+    const ok = await announcer.announce({ settings: settings.announce, sound: settings.sound, showForMs: 10_000 });
+    if (!ok) toast.error(t("เครื่องนี้เล่นเสียงไม่ได้ — ตรวจลำโพง หรือคลิกที่หน้านี้แล้วลองอีกครั้ง", "This browser cannot play sound — check the speakers, or click the page and try again"));
   };
 
-  const testChime = async (style: ChimeStyle) => {
-    if (!confirmLive()) return;
-    if (!(await ensureAudio()) || playChime(style) === 0) toast.error(t("เครื่องนี้เล่นเสียงไม่ได้", "This browser cannot play sound"));
-  };
+  const setRules = (rules: Partial<RoomRules>) => update("rules", { ...settings.rules, ...rules });
+  const setStudentRules = (studentRules: Partial<StudentRulesSettings>) => update("studentRules", { ...settings.studentRules, ...studentRules });
 
   const toggleSound = () => update("sound", !settings.sound);
 
@@ -541,8 +520,8 @@ export function ExamTimer() {
   }, [now, settings.endTime, settings.startTime]);
 
   const running = session !== null && phase !== "ended";
-  const rules = rulesFor(settings.rulesPreset, settings.customRules);
-  const preset = RULE_PRESETS.find((p) => p.id === settings.rulesPreset);
+  const rules = settings.rules;
+  const board = settings.studentRules.show ? studentRuleCards(rules, settings.studentRules) : null;
 
   const controlBar = (
     <div
@@ -583,6 +562,18 @@ export function ExamTimer() {
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+      {hydrated ? (
+        <ExamNoticePrint
+          title={settings.title}
+          room={settings.room}
+          date={today}
+          startTime={settings.startTime}
+          endTime={settings.endTime}
+          rules={rules}
+          options={settings.studentRules}
+        />
+      ) : null}
+
       {/* ── Display ── */}
       <div className="flex min-w-0 flex-col gap-3">
         <div className={cn(pseudoFullscreen && "fixed inset-0 z-[100]")}>
@@ -595,6 +586,7 @@ export function ExamTimer() {
             theme={settings.theme}
             fullscreen={fullscreen}
             rules={rules}
+            board={board}
             caption={announcer.caption}
           >
             {hydrated && fullscreen ? controlBar : null}
@@ -661,7 +653,7 @@ export function ExamTimer() {
           <CardHeader>
             <div>
               <CardTitle>{t("ตั้งค่าการสอบ", "Exam setup")}</CardTitle>
-              <CardDescription>{t("ทำตามขั้นตอน 1–3 แล้วกดเริ่มจับเวลา", "Fill in steps 1–3, then start the timer")}</CardDescription>
+              <CardDescription>{t("ทำตามขั้นตอน 1–3 แล้วกดเริ่มจับเวลา · ข้อ 4–5 ตั้งไว้ให้แล้ว ปรับได้", "Fill in steps 1–3, then start the timer · steps 4–5 are already set, change them if needed")}</CardDescription>
             </div>
             {running ? <Badge tone="success">{t("กำลังจับเวลา", "Running")}</Badge> : null}
           </CardHeader>
@@ -755,59 +747,36 @@ export function ExamTimer() {
               ) : null}
             </Step>
 
-            <Step number={3} title={t("กติกาห้องสอบ (แสดงบนจอ)", "Room rules (on screen)")}>
-              <NativeSelect
-                aria-label={t("กติกาห้องสอบ", "Room rules")}
-                value={settings.rulesPreset}
-                onChange={(e) => {
-                  const next = e.target.value as RulePresetId;
-                  // "Custom" starts from the rules that were showing, so staff only change the one number they need.
-                  setSettings((s) => ({
-                    ...s,
-                    rulesPreset: next,
-                    customRules: next === "custom" && s.rulesPreset !== "custom" ? rulesFor(s.rulesPreset, s.customRules) : s.customRules,
-                  }));
-                  setError(null);
-                }}
-                className="h-10"
-              >
-                {RULE_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {t(p.name)}
-                  </option>
-                ))}
-                <option value="custom">{t("กำหนดเอง", "Custom")}</option>
-              </NativeSelect>
-              {settings.rulesPreset === "custom" ? (
-                <div className="grid grid-cols-3 gap-2">
-                  <RuleSelect
-                    label={t("เข้าห้องได้ภายใน", "Late entry up to")}
-                    options={LATE_ENTRY_OPTIONS}
-                    value={settings.customRules.lateEntryMinutes}
-                    onChange={(v) => update("customRules", { ...settings.customRules, lateEntryMinutes: v })}
-                  />
-                  <RuleSelect
-                    label={t("ออกได้หลัง", "Leave after")}
-                    options={EARLY_LEAVE_OPTIONS}
-                    value={settings.customRules.earlyLeaveMinutes}
-                    onChange={(v) => update("customRules", { ...settings.customRules, earlyLeaveMinutes: v })}
-                  />
-                  <RuleSelect
-                    label={t("งดออกช่วงท้าย", "No leaving, final")}
-                    options={LAST_LEAVE_OPTIONS}
-                    value={settings.customRules.lastLeaveMinutes}
-                    onChange={(v) => update("customRules", { ...settings.customRules, lastLeaveMinutes: v })}
-                  />
-                </div>
-              ) : null}
+            <Step number={3} title={t("กติกาเข้า–ออกห้องสอบ", "Entering & leaving")}>
+              <ChoiceGroup
+                label={t("เข้าห้องสอบสายได้ไม่เกิน", "Late entry allowed")}
+                choices={LATE_ENTRY_CHOICES}
+                value={rules.lateEntryMinutes}
+                regulation={REGULATION_RULES.lateEntryMinutes}
+                labelFor={(m) => (m === 0 ? t("ไม่ให้สาย", "None") : t(`${m} นาที`, `${m} min`))}
+                onChange={(m) => setRules({ lateEntryMinutes: m })}
+              />
+              <ChoiceGroup
+                label={t("ออกจากห้องสอบได้เมื่อสอบไปแล้ว", "May leave after")}
+                choices={EARLY_LEAVE_CHOICES}
+                value={rules.earlyLeaveMinutes}
+                regulation={REGULATION_RULES.earlyLeaveMinutes}
+                labelFor={(m) => (m === 60 ? t("1 ชั่วโมง", "1 hour") : t(`${m} นาที`, `${m} min`))}
+                onChange={(m) => setRules({ earlyLeaveMinutes: m })}
+              />
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {t(describeRules(rules))}
-                {preset?.source.th ? (
-                  <span className="block text-[11px]">
-                    {t("อ้างอิง: ", "Based on: ")}
-                    {t(preset.source)}
-                  </span>
-                ) : null}
+                {isRegulation(rules) ? (
+                  <span className="block text-[11px]">{t("ตรงตามข้อบังคับสถาบัน ข้อ ๒", "Matches the Institute regulation (clause 2)")}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => update("rules", REGULATION_RULES)}
+                    className="mt-0.5 flex cursor-pointer items-center gap-1 text-[11px] font-medium text-brand-700 hover:underline"
+                  >
+                    <RotateCcw className="size-3" aria-hidden /> {t("กลับไปใช้ตามข้อบังคับ (สาย 30 นาที · ออกหลัง 1 ชั่วโมง)", "Back to the regulation (30 min late · leave after 1 hour)")}
+                  </button>
+                )}
               </p>
             </Step>
 
@@ -830,9 +799,52 @@ export function ExamTimer() {
 
         <Card className="h-fit">
           <CardHeader>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <StepNumber number={4} />
+                {t("ข้อปฏิบัติสำหรับนักศึกษา", "Rules for students")}
+              </CardTitle>
+              <CardDescription>
+                {t(
+                  "ข้อบังคับให้แจ้งก่อนเริ่มสอบทุกครั้ง ทั้งทางวาจาและลายลักษณ์อักษร (บัตร · มือถือ · สิ่งของต้องห้าม · การแต่งกาย · ทุจริต)",
+                  "The regulation asks invigilators to announce these before every exam, aloud and in writing (ID · phones · prohibited items · dress · misconduct)",
+                )}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <SwitchRow
+              id="rules-board"
+              icon={ScrollText}
+              label={t("แสดงบนจอก่อนเริ่มสอบ", "Show on screen before the start")}
+              hint={t("ตอนนักศึกษาเข้าห้อง จอจะแสดงข้อปฏิบัติ 6 ข้อ พร้อมเวลานับถอยหลัง", "While students take their seats, the screen shows six rules and the countdown")}
+              checked={settings.studentRules.show}
+              onCheckedChange={(show) => setStudentRules({ show })}
+            />
+            <SwitchRow
+              id="rules-calculator"
+              icon={Calculator}
+              label={t("วิชานี้อนุญาตให้ใช้เครื่องคิดเลข", "Calculators allowed in this exam")}
+              checked={settings.studentRules.calculatorAllowed}
+              onCheckedChange={(calculatorAllowed) => setStudentRules({ calculatorAllowed })}
+            />
+            <Button variant="secondary" onClick={() => window.print()} className="w-full">
+              <Printer aria-hidden /> {t("พิมพ์ประกาศข้อปฏิบัติ (A4)", "Print the rules notice (A4)")}
+            </Button>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {t(
+                "ฉบับเต็ม 2 ภาษา ใส่ชื่อวิชา ห้อง วันเวลาให้เอง — ติดหน้าห้องสอบ หรืออ่านให้นักศึกษาฟังก่อนเริ่มสอบ (เลือก “บันทึกเป็น PDF” ได้)",
+                "The full notice in Thai and English, with the exam, room, date and time filled in — post it at the door or read it out (you can also “Save as PDF”)",
+              )}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <StepNumber number={4} />
-              {t("เสียง", "Sound")}
+              <StepNumber number={5} />
+              {t("เสียงกริ่งและการเตือน", "Chimes & warning")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -843,14 +855,7 @@ export function ExamTimer() {
               onVolumeChange={(volume) => update("volume", volume)}
               sound={settings.sound}
               onSoundChange={(sound) => update("sound", sound)}
-              supported={announcer.supported}
-              voicesLoaded={announcer.voicesLoaded}
-              voices={announcer.voices}
-              speaking={announcer.speaking}
-              result={announcer.result}
-              onTest={() => void testAnnouncement()}
-              onTestChime={(style) => void testChime(style)}
-              onStop={() => silence()}
+              onTest={() => void testWarning()}
             />
           </CardContent>
         </Card>
@@ -879,28 +884,77 @@ function Step({ number, title, children }: { number: number; title: string; chil
   );
 }
 
-function RuleSelect({
+function ChoiceGroup({
   label,
-  options,
+  choices,
   value,
+  regulation,
+  labelFor,
   onChange,
 }: {
   label: string;
-  options: readonly number[];
+  choices: readonly number[];
   value: number;
-  onChange: (value: number) => void;
+  /** The choice the institute regulation prescribes; marked under its button. */
+  regulation: number;
+  labelFor: (minutes: number) => string;
+  onChange: (minutes: number) => void;
 }) {
   const t = useT();
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-      <NativeSelect value={value} onChange={(e) => onChange(Number(e.target.value))} className="h-9 text-xs">
-        {options.map((m) => (
-          <option key={m} value={m}>
-            {m === 0 ? t("ไม่กำหนด", "Off") : t(`${m} นาที`, `${m} min`)}
-          </option>
-        ))}
-      </NativeSelect>
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-neutral-700">{label}</span>
+      <div role="group" aria-label={label} className="grid auto-cols-fr grid-flow-col gap-1 rounded-[var(--radius-control)] bg-neutral-100 p-1">
+        {choices.map((minutes) => {
+          const selected = value === minutes;
+          return (
+            <button
+              key={minutes}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange(minutes)}
+              className={cn(
+                "flex min-h-11 cursor-pointer flex-col items-center justify-center rounded-[6px] px-1.5 py-1 text-sm font-medium transition-colors outline-none focus-visible:shadow-[var(--shadow-focus)]",
+                selected ? "bg-card text-brand-800 shadow-[var(--shadow-sm)] ring-1 ring-brand-300" : "text-neutral-600 hover:bg-white/60 hover:text-neutral-900",
+              )}
+            >
+              {labelFor(minutes)}
+              {minutes === regulation ? (
+                <span className={cn("text-[10px] leading-tight font-normal", selected ? "text-brand-600" : "text-neutral-400")}>{t("ตามข้อบังคับ", "Regulation")}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SwitchRow({
+  id,
+  icon: Icon,
+  label,
+  hint,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <Label htmlFor={id} className="flex flex-col gap-0.5 leading-snug">
+        <span className="flex items-center gap-1.5">
+          <Icon className="size-4 shrink-0 text-brand-600" aria-hidden />
+          {label}
+        </span>
+        {hint ? <span className="pl-[22px] text-[11px] font-normal text-muted-foreground">{hint}</span> : null}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   );
 }

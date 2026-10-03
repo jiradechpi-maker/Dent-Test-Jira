@@ -3,10 +3,12 @@
 import { forwardRef } from "react";
 import { DoorClosed, DoorOpen, Info, Megaphone } from "lucide-react";
 import { roomNotices, type RoomRules } from "@/lib/exam-timer/room-rules";
+import type { StudentRule } from "@/lib/exam-timer/student-rules";
 import { cn } from "@/lib/utils";
 import { todayInBangkok } from "@/lib/thai";
 import { displayYear, formatDay, monthName, weekdayName } from "@/lib/i18n/dates";
 import type { Caption } from "./use-announcer";
+import { RULE_ICONS } from "./rule-icons";
 import {
   extensionMs,
   formatClock,
@@ -55,6 +57,8 @@ export interface TimerDisplayProps {
   theme: DisplayTheme;
   fullscreen: boolean;
   rules: RoomRules;
+  /** Rule cards shown while candidates take their seats (before the start); null = off. */
+  board?: StudentRule[] | null;
   caption?: Caption | null;
   children?: React.ReactNode;
 }
@@ -68,7 +72,7 @@ function bilingualDate(iso: string): string {
 
 /** The projector-facing screen. Sizes itself to its container with container-query units. */
 export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(function TimerDisplay(
-  { session, now, title, room, theme, fullscreen, rules, caption, children },
+  { session, now, title, room, theme, fullscreen, rules, board, caption, children },
   ref,
 ) {
   const dark = theme === "dark";
@@ -80,6 +84,9 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
   const extension = session ? extensionMs(session) : 0;
   const plannedEnd = session ? session.endAt - extension : 0;
   const notices = session ? roomNotices(session, now, rules) : [];
+  // Before the start the screen is mostly the rules; the countdown moves to the corner. A 5-minute caption never
+  // happens then, but a test caption does — it takes the normal layout so the words have room.
+  const showBoard = Boolean(board?.length) && (phase === null || phase === "waiting") && !caption;
   const dateText = now > 0 ? bilingualDate(todayInBangkok(new Date(now))) : "";
 
   const label =
@@ -117,14 +124,31 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
             {[room, dateText].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <div className="shrink-0 text-right">
-          <p className={cn("text-[1.6cqw] tracking-wide uppercase", dark ? "text-white/50" : "text-neutral-400")}>เวลาปัจจุบัน · Now</p>
-          <p className="font-[family-name:var(--font-latin)] text-[4cqw] leading-none font-semibold tabular">{now > 0 ? formatClock(now, true) : "--:--:--"}</p>
-        </div>
+        {showBoard && phase === "waiting" ? (
+          // With the rules on screen, the countdown to the start takes the clock's corner.
+          <div className="shrink-0 text-right">
+            <p className={cn("text-[1.6cqw] tracking-wide", dark ? "text-amber-200/80" : "text-amber-700")}>จะเริ่มสอบในอีก · Exam begins in</p>
+            <p className={cn("font-[family-name:var(--font-latin)] text-[4.6cqw] leading-none font-semibold tracking-[-0.02em] tabular", dark ? "text-amber-300" : "text-amber-600")}>
+              {formatCountdown(remaining)}
+            </p>
+          </div>
+        ) : (
+          <div className="shrink-0 text-right">
+            <p className={cn("text-[1.6cqw] tracking-wide uppercase", dark ? "text-white/50" : "text-neutral-400")}>เวลาปัจจุบัน · Now</p>
+            <p className="font-[family-name:var(--font-latin)] text-[4cqw] leading-none font-semibold tabular">{now > 0 ? formatClock(now, true) : "--:--:--"}</p>
+          </div>
+        )}
       </div>
 
+      {showBoard && board ? (
+        <RulesBoard board={board} dark={dark} />
+      ) : null}
+
       {/* Main countdown — sized against this box's own height too, so it never runs into the header or rules */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[4cqw] pt-[0.8cqw]" style={{ containerType: "size" }}>
+      <div
+        className={cn("min-h-0 flex-1 flex-col items-center justify-center px-[4cqw] pt-[0.8cqw]", showBoard ? "hidden" : "flex")}
+        style={{ containerType: "size" }}
+      >
         <p className={cn("text-[min(2.8cqw,10cqh)] font-medium", dark ? "text-white/70" : "text-neutral-500")}>
           <span lang="th">{label.th}</span>{" "}
           <span lang="en" className="font-[family-name:var(--font-latin)] opacity-70">
@@ -187,7 +211,7 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
       ) : null}
 
       {/* Exam-room rules, worded for right now (the caption takes their place while it is shown) */}
-      {notices.length && !caption ? (
+      {notices.length && !caption && !showBoard ? (
         <div className="flex flex-wrap items-center justify-center gap-[1.2cqw] px-[4cqw] pb-[1.6cqw]">
           {notices.map((notice) => {
             const Icon = notice.state === "open" ? DoorOpen : notice.state === "closed" ? DoorClosed : Info;
@@ -254,3 +278,51 @@ export const TimerDisplay = forwardRef<HTMLDivElement, TimerDisplayProps>(functi
     </div>
   );
 });
+
+/** "ข้อปฏิบัติในการสอบ" — six cards in Thai and English, readable from the back of the room. */
+function RulesBoard({ board, dark }: { board: StudentRule[]; dark: boolean }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col px-[4cqw] pt-[1.2cqw] pb-[1.6cqw]" style={{ containerType: "size" }}>
+      <p className="leading-tight">
+        <span lang="th" className="text-[min(2.5cqw,9cqh)] font-semibold">
+          ข้อปฏิบัติในการสอบ
+        </span>{" "}
+        <span lang="en" className={cn("font-[family-name:var(--font-latin)] text-[min(1.7cqw,6cqh)] font-medium", dark ? "text-white/60" : "text-neutral-500")}>
+          · Examination rules
+        </span>
+      </p>
+      <ul className="mt-[1.2cqw] grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-[1.1cqw]">
+        {board.map((rule) => {
+          const Icon = RULE_ICONS[rule.id];
+          const alert = rule.id === "misconduct";
+          return (
+            <li
+              key={rule.id}
+              className={cn(
+                "flex min-h-0 gap-[1.2cqw] overflow-hidden rounded-[1.4cqw] px-[1.6cqw] py-[1.1cqw] ring-1",
+                dark ? "bg-white/[0.06] ring-white/10" : "bg-neutral-50 ring-neutral-200",
+                alert && (dark ? "bg-rose-500/[0.12] ring-rose-300/25" : "bg-rose-50 ring-rose-200"),
+              )}
+            >
+              <Icon
+                className={cn("mt-[0.1cqw] size-[min(3cqw,10cqh)] shrink-0", alert ? (dark ? "text-rose-300" : "text-rose-600") : dark ? "text-amber-300" : "text-brand-600")}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <p lang="th" className="text-[min(1.8cqw,6.2cqh)] leading-tight font-semibold">
+                  {rule.title.th}
+                </p>
+                <p lang="th" className={cn("mt-[0.4cqw] text-[min(1.55cqw,5.4cqh)] leading-snug", dark ? "text-white/90" : "text-neutral-800")}>
+                  {rule.text.th}
+                </p>
+                <p lang="en" className={cn("mt-[0.3cqw] font-[family-name:var(--font-latin)] text-[min(1.25cqw,4.3cqh)] leading-snug", dark ? "text-white/60" : "text-neutral-500")}>
+                  {rule.text.en}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}

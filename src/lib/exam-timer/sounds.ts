@@ -1,12 +1,12 @@
 /**
  * Exam sounds synthesised with the Web Audio API — no audio files, works offline,
  * and is loud enough for a lecture hall: a ding-dong when the exam starts, a ringing
- * bell when time is up, and a choice of chimes before the spoken 5-minute warning.
+ * bell when time is up, and a choice of chimes for the 5-minute warning.
  */
 
 export type ExamSound = "start" | "end";
 
-/** Chimes the staff can choose for the 5-minute announcement. */
+/** Chimes the staff can choose for the 5-minute warning. */
 export const CHIME_STYLES = ["dingdong", "triple", "bell", "school", "beep", "none"] as const;
 export type ChimeStyle = (typeof CHIME_STYLES)[number];
 
@@ -16,7 +16,7 @@ export const CHIME_LABELS: Record<ChimeStyle, { th: string; en: string }> = {
   bell: { th: "ระฆัง", en: "Bell" },
   school: { th: "กริ่งโรงเรียน", en: "School bell" },
   beep: { th: "บี๊ป 3 ครั้ง", en: "Three beeps" },
-  none: { th: "ไม่มีเสียงกริ่ง (พูดอย่างเดียว)", en: "No chime (voice only)" },
+  none: { th: "ไม่มีเสียงกริ่ง (ขึ้นข้อความอย่างเดียว)", en: "No chime (on-screen text only)" },
 };
 
 let context: AudioContext | null = null;
@@ -137,7 +137,7 @@ export function playSound(kind: ExamSound): number {
   return 7.6;
 }
 
-/** Plays a chime before an announcement. Returns its length in seconds (0 for "none" or when audio is locked). */
+/** Plays the 5-minute chime. Returns its length in seconds (0 for "none" or when audio is locked). */
 export function playChime(style: ChimeStyle): number {
   if (style === "none") return 0;
   const r = ready();

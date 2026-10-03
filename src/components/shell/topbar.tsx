@@ -12,6 +12,7 @@ import { modKeyLabel } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useLocale, useT } from "@/components/i18n/locale-provider";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { DentboardMark } from "@/components/brand/dentboard-mark";
 import { SidebarContent } from "./sidebar";
 
 /** Bangkok wall time. English adds the zone (ICT, UTC+7) for colleagues outside Thailand. */
@@ -74,7 +75,11 @@ export function Topbar() {
       </DialogPrimitive.Root>
 
       <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
-        <Link href="/" className="rounded text-neutral-500 outline-none transition-colors hover:text-neutral-800 focus-visible:shadow-[var(--shadow-focus)]">
+        <Link
+          href="/"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded text-neutral-500 outline-none transition-colors hover:text-neutral-800 focus-visible:shadow-[var(--shadow-focus)]"
+        >
+          <DentboardMark className="h-4 w-auto lg:hidden" />
           Dentboard
         </Link>
         {current && current.href !== "/" ? (

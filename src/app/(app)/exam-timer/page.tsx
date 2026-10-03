@@ -19,8 +19,8 @@ export default async function ExamTimerPage() {
         icon={Timer}
         title={t(getNavItem("exam-timer").label)}
         description={t(
-          "ใส่เวลาสอบตามตาราง แล้วกดเริ่ม · ประกาศเสียงเมื่อเหลือเวลาสอบ 5 นาที (เปิด/ปิดได้) · กด F เพื่อแสดงเต็มจอบนโปรเจกเตอร์",
-          "Enter the scheduled times and press start · optional spoken warning at 5 minutes left · press F for full screen on the projector",
+          "ใส่เวลาสอบตามตาราง แล้วกดเริ่ม · จอแสดงข้อปฏิบัติก่อนเริ่มสอบ และกติกาเข้า–ออกห้อง · เตือนเมื่อเหลือ 5 นาที · กด F เพื่อแสดงเต็มจอบนโปรเจกเตอร์",
+          "Enter the scheduled times and press start · the screen shows the exam rules before the start and the door rules during it · a 5-minute warning · press F for full screen on the projector",
         )}
         className="mb-5"
       />
