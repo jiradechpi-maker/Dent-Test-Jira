@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { X } from "lucide-react";
+import { useT } from "@/components/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 export const Dialog = DialogPrimitive.Root;
@@ -26,6 +27,7 @@ export function DialogContent({
   hideClose = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
+  const t = useT();
   return (
     <DialogPrimitive.Portal>
       <Overlay />
@@ -39,7 +41,7 @@ export function DialogContent({
         {children}
         {!hideClose && (
           <DialogPrimitive.Close
-            aria-label="ปิด"
+            aria-label={t("ปิด", "Close")}
             className="absolute top-3 right-3 rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800"
           >
             <X className="size-4" />
@@ -58,6 +60,7 @@ export function DrawerContent({
   description,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { title: string; description?: string }) {
+  const t = useT();
   return (
     <DialogPrimitive.Portal>
       <Overlay />
@@ -76,7 +79,7 @@ export function DrawerContent({
             ) : null}
           </div>
           <DialogPrimitive.Close
-            aria-label="ปิด"
+            aria-label={t("ปิด", "Close")}
             className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800"
           >
             <X className="size-4" />

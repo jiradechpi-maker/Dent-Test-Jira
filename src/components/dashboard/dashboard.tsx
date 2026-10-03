@@ -12,34 +12,48 @@ import { ServiceStatusList } from "@/components/system/service-status";
 import { TodayTasks } from "./today-tasks";
 import { todayInBangkok } from "@/lib/thai";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/locale-provider";
+import { formatDay } from "@/lib/i18n/dates";
+import { bi, type Bi } from "@/lib/i18n/locale";
 
-const PHASES = [
-  { phase: 0, title: "โครงระบบ + Design system + ⌘K", done: true },
-  { phase: 1, title: "ฐานข้อมูล + ตารางสอนหลัก + Excel", done: false },
-  { phase: 2, title: "Document engine + หนังสือเชิญ (พร้อมใช้ · คลังแม่แบบบน Supabase ตามมากับฐานข้อมูล)", done: true },
-  { phase: 3, title: "ตารางสอบ + เสนอห้อง/กรรมการ + ชั่วโมงคุมสอบ (พร้อมใช้ · จัดอัตโนมัติเต็มรูปแบบตามมา)", done: true },
-  { phase: 4, title: "คลังข้อสอบ Kanban + T-7 + ใบปะหน้า", done: false },
-  { phase: 5, title: "Reconciliation + ใบลงเวลา + ฉบับแก้ไข", done: false },
-  { phase: 6, title: "หาวันว่าง + Cascade shift", done: false },
-  { phase: 7, title: "ซิงก์ Google Drive (ตารางสอนปี 4 + ตารางคุมสอบ)", done: true },
-  { phase: 8, title: "รายงาน + เอกสารคู่มือ", done: false },
+const PHASES: { phase: number; title: Bi; done: boolean }[] = [
+  { phase: 0, title: bi("โครงระบบ + Design system + ⌘K", "App shell + design system + ⌘K"), done: true },
+  { phase: 1, title: bi("ฐานข้อมูล + ตารางสอนหลัก + Excel", "Database + master timetable + Excel"), done: false },
+  {
+    phase: 2,
+    title: bi(
+      "Document engine + หนังสือเชิญ (พร้อมใช้ · คลังแม่แบบบน Supabase ตามมากับฐานข้อมูล)",
+      "Document engine + invitation letters (ready · Supabase template library to follow with the database)",
+    ),
+    done: true,
+  },
+  {
+    phase: 3,
+    title: bi(
+      "ตารางสอบ + เสนอห้อง/กรรมการ + ชั่วโมงคุมสอบ (พร้อมใช้ · จัดอัตโนมัติเต็มรูปแบบตามมา)",
+      "Exam schedule + room/invigilator suggestions + invigilation hours (ready · full auto-scheduling to follow)",
+    ),
+    done: true,
+  },
+  { phase: 4, title: bi("คลังข้อสอบ Kanban + T-7 + ใบปะหน้า", "Exam paper Kanban + T-7 + cover sheets"), done: false },
+  { phase: 5, title: bi("Reconciliation + ใบลงเวลา + ฉบับแก้ไข", "Reconciliation + time sheets + revisions"), done: false },
+  { phase: 6, title: bi("หาวันว่าง + Cascade shift", "Slot finder + cascade shift"), done: false },
+  { phase: 7, title: bi("ซิงก์ Google Drive (ตารางสอนปี 4 + ตารางคุมสอบ)", "Google Drive sync (Year 4 timetable + invigilation schedule)"), done: true },
+  { phase: 8, title: bi("รายงาน + เอกสารคู่มือ", "Reports + user guide"), done: false },
 ];
 
 function TodayCard() {
+  const t = useT();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   if (!now) return <Skeleton className="h-[120px] w-full rounded-[var(--radius-card)]" />;
-  const weekday = new Date(`${todayInBangkok(now)}T00:00:00Z`).getUTCDay();
-  const day = DAY_COLORS[weekday] ?? DAY_COLORS[0];
-  const dateText = new Intl.DateTimeFormat("th-TH-u-ca-buddhist", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Asia/Bangkok",
-  }).format(now);
+  const today = todayInBangkok(now);
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const day = DAY_COLORS[weekday] ?? DAY_COLORS[0]!;
+  const dateText = formatDay(today, t.locale, "long");
   const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Bangkok" }).format(now));
-  const greeting = hour < 12 ? "สวัสดีตอนเช้า" : hour < 17 ? "สวัสดีตอนบ่าย" : "สวัสดีตอนเย็น";
+  const greeting =
+    hour < 12 ? t("สวัสดีตอนเช้า", "Good morning") : hour < 17 ? t("สวัสดีตอนบ่าย", "Good afternoon") : t("สวัสดีตอนเย็น", "Good evening");
   return (
     <Card className="relative overflow-hidden">
       <div aria-hidden className="absolute inset-y-0 left-0 w-1.5" style={{ background: day.hex }} />
@@ -48,7 +62,7 @@ function TodayCard() {
         <p className="text-xl font-semibold tracking-tight text-neutral-900">{dateText}</p>
         <p className="mt-1 flex items-center gap-2 text-xs text-neutral-600">
           <span className="inline-block size-3 rounded-full ring-1 ring-black/10" style={{ background: day.hex }} aria-hidden />
-          สีประจำวัน{day.name}
+          {t(`สีประจำวัน${day.name.th}`, `Colour of the day · ${day.name.en}`)}
         </p>
       </CardContent>
     </Card>
@@ -59,31 +73,33 @@ const QUICK_ACTIONS = [
   {
     href: "/schedule",
     icon: CalendarDays,
-    title: "ตารางสอนชั้นปี 4",
-    description: "ซิงก์จาก Google Drive · ดูรายสัปดาห์ ค้นหาอาจารย์",
+    title: bi("ตารางสอนชั้นปี 4", "Year 4 timetable"),
+    description: bi("ซิงก์จาก Google Drive · ดูรายสัปดาห์ ค้นหาอาจารย์", "Synced from Google Drive · weekly view and lecturer search"),
   },
   {
     href: "/exams",
     icon: ClipboardList,
-    title: "ตารางสอบ & สิ่งที่ต้องตรวจ",
-    description: "ห้องชน กรรมการซ้อน พร้อมห้อง/กรรมการที่เสนอให้",
+    title: bi("ตารางสอบ & สิ่งที่ต้องตรวจ", "Exam schedule & checks"),
+    description: bi("ห้องชน กรรมการซ้อน พร้อมห้อง/กรรมการที่เสนอให้", "Room clashes and double-booked invigilators, with suggested rooms and invigilators"),
   },
   {
     href: "/documents/invitations",
     icon: Mail,
-    title: "ออกหนังสือเชิญอาจารย์พิเศษ",
-    description: "Word + PDF ตามแบบฟอร์มคณะ พร้อมเอกสารแนบตารางสอน",
+    title: bi("ออกหนังสือเชิญอาจารย์พิเศษ", "Issue a guest lecturer invitation"),
+    description: bi("Word + PDF ตามแบบฟอร์มคณะ พร้อมเอกสารแนบตารางสอน", "Word + PDF on the faculty template, with the timetable attached"),
   },
   {
     href: "/exam-timer",
     icon: Timer,
-    title: "นาฬิกาจับเวลาสอบ",
-    description: "ตั้งเวลาเลิกสอบ นับถอยหลังทันที แสดงเต็มจอ มีเสียงเตือน",
+    title: bi("นาฬิกาจับเวลาสอบ", "Exam timer"),
+    description: bi("ใส่เวลาสอบจริง แสดงเต็มจอ พร้อมประกาศเสียงพูดไทย/อังกฤษ", "Full-screen exam countdown with spoken Thai/English announcements"),
   },
 ];
 
 export function Dashboard() {
+  const t = useT();
   const planned = NAV_ITEMS.filter((item) => item.status === "planned");
+  const phasesDone = PHASES.filter((p) => p.done).length;
 
   return (
     <div className="grid gap-5 lg:grid-cols-3">
@@ -107,10 +123,10 @@ export function Dashboard() {
                     </span>
                     <div>
                       <p className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-                        {action.title}
+                        {t(action.title)}
                         <ArrowRight className="size-4 -translate-x-1 text-brand-600 opacity-0 transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{action.description}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{t(action.description)}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -122,8 +138,8 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>โมดูลที่กำลังพัฒนา</CardTitle>
-              <CardDescription>เปิดใช้งานตามลำดับ Phase</CardDescription>
+              <CardTitle>{t("โมดูลที่กำลังพัฒนา", "Modules in development")}</CardTitle>
+              <CardDescription>{t("เปิดใช้งานตามลำดับ Phase", "Released phase by phase")}</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
@@ -136,7 +152,7 @@ export function Dashboard() {
                   className="flex items-center gap-3 rounded-[var(--radius-control)] border border-border px-3 py-2.5 text-[13px] outline-none transition-colors hover:bg-row-hover focus-visible:shadow-[var(--shadow-focus)]"
                 >
                   <Icon className="size-4 shrink-0 text-neutral-500" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{t(item.label)}</span>
                   <Badge>Phase {item.phase}</Badge>
                 </Link>
               );
@@ -149,8 +165,8 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>สถานะระบบ</CardTitle>
-              <CardDescription>ตรวจสอบอัตโนมัติทุก 1 นาที</CardDescription>
+              <CardTitle>{t("สถานะระบบ", "System status")}</CardTitle>
+              <CardDescription>{t("ตรวจสอบอัตโนมัติทุก 1 นาที", "Checked automatically every minute")}</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -161,9 +177,9 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>แผนการพัฒนา</CardTitle>
+              <CardTitle>{t("แผนการพัฒนา", "Roadmap")}</CardTitle>
               <CardDescription>
-                เสร็จแล้ว {PHASES.filter((p) => p.done).length} จาก {PHASES.length} เฟส
+                {t(`เสร็จแล้ว ${phasesDone} จาก ${PHASES.length} เฟส`, `${phasesDone} of ${PHASES.length} phases complete`)}
               </CardDescription>
             </div>
           </CardHeader>
@@ -177,7 +193,7 @@ export function Dashboard() {
                     <CircleDashed className="mt-0.5 size-4 shrink-0 text-neutral-300" aria-hidden />
                   )}
                   <span className={cn(p.done ? "text-neutral-800" : "text-neutral-500")}>
-                    <span className="font-[family-name:var(--font-latin)] font-medium">Phase {p.phase}</span> · {p.title}
+                    <span className="font-[family-name:var(--font-latin)] font-medium">Phase {p.phase}</span> · {t(p.title)}
                   </span>
                 </li>
               ))}

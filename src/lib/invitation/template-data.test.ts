@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import PizZip from "pizzip";
 import { describe, expect, it } from "vitest";
-import { prepareDocxForLibreOffice, renderDocx } from "@/server/render-docx";
+import { prepareDocxForLibreOffice, renderDocx, TemplateRenderError } from "@/server/render-docx";
 import { SAMPLE_INVITATION } from "./sample";
 import { invitationSchema } from "./schema";
 import { buildInvitationTemplateData, invitationFileName, invitationProtectedWords } from "./template-data";
@@ -136,6 +136,23 @@ describe("rendered .docx", () => {
     expect(text).toContain("พฤหัสบดีที่ ๐๑/๑๐/๖๙");
     expect(text).toContain("Extra & <special> topic");
     expect(text).toContain("๑.๕");
+  });
+});
+
+describe("template errors", () => {
+  it("reports a broken template in both languages", () => {
+    let caught: unknown;
+    try {
+      renderDocx(Buffer.from("not a docx"), {});
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(TemplateRenderError);
+    expect((caught as TemplateRenderError).text).toEqual({
+      th: "ไม่สามารถสร้างเอกสารจากแม่แบบได้",
+      en: "Couldn't build the document from the template",
+    });
+    expect((caught as TemplateRenderError).message).toBe("ไม่สามารถสร้างเอกสารจากแม่แบบได้");
   });
 });
 

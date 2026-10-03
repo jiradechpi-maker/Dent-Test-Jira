@@ -31,18 +31,37 @@ describe("findExamClashes", () => {
   });
 
   it("flags an invigilator booked twice", () => {
-    expect(issues.find((issue) => issue.kind === "invigilator-clash")?.title).toContain("Earth");
+    const clash = issues.find((issue) => issue.kind === "invigilator-clash");
+    expect(clash?.title.th).toContain("Earth");
+    expect(clash?.title.th).toMatch(/^กรรมการซ้อนเวลา: /);
+    expect(clash?.title.en).toMatch(/^Double-booked invigilators?: .*Earth/);
+  });
+
+  it("describes both exams in each language with that language's dates and times", () => {
+    const clash = issues.find((issue) => issue.kind === "room-clash")!;
+    expect(clash.title.th).toMatch(/^ห้องชน: /);
+    expect(clash.title.en).toMatch(/^Room clash: /);
+    expect(clash.detail.th).toContain(" กับ ");
+    expect(clash.detail.th).toMatch(/\(ปี \d\) \d{2}\.\d{2}–\d{2}\.\d{2}/);
+    expect(clash.detail.en).toContain(" and ");
+    expect(clash.detail.en).toMatch(/\(Year \d\) \d{2}:\d{2}–\d{2}:\d{2}/);
+    expect(clash.detail.en).not.toMatch(/[\u0E00-\u0E7F]/);
   });
 
   it("treats same room + same time + same invigilators as one combined sitting", () => {
-    expect(issues.find((issue) => issue.date === "2026-10-21")).toMatchObject({ kind: "shared-room", severity: "info" });
+    const shared = issues.find((issue) => issue.date === "2026-10-21");
+    expect(shared).toMatchObject({ kind: "shared-room", severity: "info" });
+    expect(shared?.title.th).toMatch(/^สอบร่วมห้อง /);
+    expect(shared?.title.en).toMatch(/^Shared exam room: /);
   });
 });
 
 describe("findIncompleteExams", () => {
   it("lists upcoming exams still missing a date", () => {
     const issues = findIncompleteExams(book.entries, "2026-10-01");
-    expect(issues.filter((issue) => issue.kind === "missing-date")).toHaveLength(2);
+    const undated = issues.filter((issue) => issue.kind === "missing-date");
+    expect(undated).toHaveLength(2);
+    expect(undated[0]?.title).toEqual({ th: "ยังไม่ได้วันสอบที่แน่นอน", en: "Exam date not yet confirmed" });
   });
 });
 
@@ -61,11 +80,15 @@ describe("crossCheckYear", () => {
   const issues = crossCheckYear(book, teaching, 4);
 
   it("spots an exam the teaching schedule moved to another day", () => {
-    expect(issues.find((issue) => issue.kind === "date-mismatch")).toMatchObject({
+    const moved = issues.find((issue) => issue.kind === "date-mismatch");
+    expect(moved).toMatchObject({
       severity: "danger",
+      title: { th: "วันสอบไม่ตรงกับตารางสอน", en: "Exam date differs from the timetable" },
       examIds: ["กรรมการคุมสอบเดือนตุลาคม 69!5"],
       sessionIds: ["H190"],
     });
+    expect(moved?.detail.th).toContain("(ย้ายมาจาก พ. 21 ต.ค.)");
+    expect(moved?.detail.en).toContain("(moved from Wed 21 Oct)");
   });
 
   it("matches a same-day exam even when the teaching title is just 'Exam'", () => {

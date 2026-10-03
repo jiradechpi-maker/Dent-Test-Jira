@@ -64,7 +64,7 @@ export function useAttachmentLayout(
   const t = (text: string) => <T words={protectedWords}>{text}</T>;
 
   const measurer = data ? (
-    <div aria-hidden style={{ position: "fixed", left: -100_000, top: 0, visibility: "hidden", pointerEvents: "none" }}>
+    <div aria-hidden lang="th" style={{ position: "fixed", left: -100_000, top: 0, visibility: "hidden", pointerEvents: "none" }}>
       <div ref={ref} className={styles.page}>
         <div data-part="header">
           <AttachmentHeader data={data} t={t} />
@@ -99,7 +99,8 @@ export function LetterPreview({ data, protectedWords, layout }: { data: Invitati
   const gap = 16;
 
   return (
-    <div ref={outer} className="w-full" style={{ height: pageCount * PAGE_HEIGHT_PX * scale + (pageCount - 1) * gap }}>
+    // lang="th": the letter is Thai whatever the UI language (screen readers, line breaking), here and in the print root.
+    <div ref={outer} lang="th" className="w-full" style={{ height: pageCount * PAGE_HEIGHT_PX * scale + (pageCount - 1) * gap }}>
       <div
         className="flex flex-col [&>section]:shadow-[var(--shadow-md)] [&>section]:ring-1 [&>section]:ring-neutral-200"
         style={{ width: PAGE_WIDTH_PX, transform: `scale(${scale})`, transformOrigin: "top left", gap: gap / scale }}
@@ -111,7 +112,7 @@ export function LetterPreview({ data, protectedWords, layout }: { data: Invitati
 }
 
 /**
- * Real-size pages kept off-screen: what the browser prints (Ctrl+P / "บันทึกเป็น PDF") and what the
+ * Real-size pages kept off-screen: what the browser prints (Ctrl+P / "Save as PDF") and what the
  * in-browser PDF export captures. Rendered straight into <body> so print CSS can hide everything else.
  */
 export function LetterPrintRoot({ data, protectedWords, layout }: { data: InvitationTemplateData; protectedWords: string[]; layout: AttachmentLayout | null }) {
@@ -123,7 +124,7 @@ export function LetterPrintRoot({ data, protectedWords, layout }: { data: Invita
   );
   if (!mounted) return null;
   return createPortal(
-    <div id={PRINT_ROOT_ID} style={{ position: "fixed", left: -100_000, top: 0 }}>
+    <div id={PRINT_ROOT_ID} lang="th" style={{ position: "fixed", left: -100_000, top: 0 }}>
       {pages}
     </div>,
     document.body,

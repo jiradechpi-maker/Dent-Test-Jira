@@ -2,14 +2,16 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
+import { bi, type Bi } from "@/lib/i18n/locale";
 import { joinProtected } from "@/lib/thai-wrap";
 
+/** `text` is the user-facing message (render with t()); `details` are docxtemplater's own explanations. */
 export class TemplateRenderError extends Error {
   constructor(
-    message: string,
+    readonly text: Bi,
     readonly details: string[] = [],
   ) {
-    super(message);
+    super(text.th);
     this.name = "TemplateRenderError";
   }
 }
@@ -52,7 +54,7 @@ export function renderDocx(template: Buffer, data: object): Buffer {
     doc.render(data);
     return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" });
   } catch (error) {
-    throw new TemplateRenderError("ไม่สามารถสร้างเอกสารจากแม่แบบได้", explain(error));
+    throw new TemplateRenderError(bi("ไม่สามารถสร้างเอกสารจากแม่แบบได้", "Couldn't build the document from the template"), explain(error));
   }
 }
 

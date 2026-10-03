@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { DATA_SOURCES, type SourceKey } from "@/config/data-sources";
-import type { ScheduleBundle, SourceInfo, SourceResult } from "@/lib/schedule/bundle";
+import { errorText, type ScheduleBundle, type SourceInfo, type SourceResult } from "@/lib/schedule/bundle";
 import { parseInvigilationWorkbook, type InvigilationBook } from "@/lib/schedule/invigilation";
 import { pickTeachingSheet } from "@/lib/schedule/sources";
 import { parseTeachingSchedule, type TeachingSchedule } from "@/lib/schedule/teaching";
@@ -122,7 +122,8 @@ async function load<T>(key: SourceKey, force: boolean): Promise<SourceResult<T>>
       key,
       label: source.label,
       url: viewUrl(fileId, key === "invigilation" ? "application/vnd.google-apps.spreadsheet" : undefined),
-      error: message,
+      // Both languages: the API serves every viewer the same bundle and the screen picks one.
+      error: errorText(error),
       setup: error instanceof DriveError || !serviceAccountFromEnv(),
     };
   }

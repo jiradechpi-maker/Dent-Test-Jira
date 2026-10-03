@@ -25,12 +25,14 @@ function letterFontCss(): Promise<string> {
 export async function exportLetterPdf(fileName: string, title: string): Promise<void> {
   const root = document.getElementById(PRINT_ROOT_ID);
   const pages = root ? [...root.querySelectorAll<HTMLElement>("[data-letter-page]")] : [];
-  if (pages.length === 0) throw new Error("ยังไม่มีเอกสารให้สร้าง PDF");
+  // Never shown: the caller falls back to the print dialog on any failure.
+  if (pages.length === 0) throw new Error("exportLetterPdf: no letter pages to capture");
 
   await document.fonts.ready;
   const [{ toPng }, { jsPDF }, fontEmbedCSS] = await Promise.all([import("html-to-image"), import("jspdf"), letterFontCss()]);
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  // i18n-exempt: document properties belong to the official Thai letter, so they stay Thai whatever the UI language.
   pdf.setProperties({ title, creator: "DentOps — คณะทันตแพทยศาสตร์ สจล." });
   for (const [index, page] of pages.entries()) {
     const png = await toPng(page, { pixelRatio: 3, backgroundColor: "#ffffff", fontEmbedCSS, cacheBust: false });

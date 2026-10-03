@@ -1,5 +1,6 @@
 import "server-only";
 import { createSign } from "node:crypto";
+import { SourceError } from "@/lib/schedule/bundle";
 
 const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -19,7 +20,10 @@ export function serviceAccountFromEnv(env: NodeJS.ProcessEnv = process.env): Ser
     const text = json.startsWith("{") ? json : Buffer.from(json, "base64").toString("utf8");
     const parsed = JSON.parse(text) as { client_email?: string; private_key?: string };
     if (parsed.client_email && parsed.private_key) return { clientEmail: parsed.client_email, privateKey: parsed.private_key };
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON ไม่มี client_email หรือ private_key");
+    throw new SourceError({
+      th: "GOOGLE_SERVICE_ACCOUNT_JSON ไม่มี client_email หรือ private_key",
+      en: "GOOGLE_SERVICE_ACCOUNT_JSON has no client_email or private_key",
+    });
   }
   const clientEmail = env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const privateKey = env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
@@ -45,7 +49,13 @@ export async function accessToken(account: ServiceAccount): Promise<string> {
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`ขอ access token จาก Google ไม่สำเร็จ (HTTP ${response.status}): ${await response.text()}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new SourceError({
+      th: `ขอ access token จาก Google ไม่สำเร็จ (HTTP ${response.status}): ${detail}`,
+      en: `Could not get an access token from Google (HTTP ${response.status}): ${detail}`,
+    });
+  }
   const body = (await response.json()) as { access_token: string; expires_in: number };
   cached = { email: account.clientEmail, token: body.access_token, expiresAt: now + body.expires_in };
   return body.access_token;

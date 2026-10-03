@@ -8,6 +8,7 @@ import {
   extensionMs,
   formatClock,
   formatCountdown,
+  formatDuration,
   formatDurationThai,
   roomNotices,
   phaseAt,
@@ -115,6 +116,8 @@ describe("official exam window", () => {
     expect([formatClock(s.startAt), formatClock(s.endAt)]).toEqual(["18:59", "19:59"]);
     expect(formatDurationThai(s.endAt - s.startAt)).toBe("1 ชั่วโมง");
     expect(formatDurationThai(90 * 60_000)).toBe("1 ชั่วโมงครึ่ง");
+    expect(formatDuration(180 * 60_000, "en")).toBe("3 hours");
+    expect(formatDuration(90 * 60_000, "en")).toBe("1 h 30 min");
   });
 
   it("keeps the planned end apart from extensions", () => {
@@ -129,7 +132,7 @@ describe("official exam window", () => {
     const result = createSession(at("08:50:00"), { startTime: "09:00", endTime: "12:00" });
     if (!result.ok) throw new Error("expected ok");
     const s = result.session;
-    const texts = (time: string) => roomNotices(s, at(time), rules).map((n) => `${n.state}:${n.text}`);
+    const texts = (time: string) => roomNotices(s, at(time), rules).map((n) => `${n.state}:${n.text.th}`);
     expect(texts("08:55:00")).toEqual([
       "info:เข้าห้องสอบได้ถึง 09:30 น.",
       "info:ออกจากห้องสอบได้ตั้งแต่ 09:45 น.",
@@ -140,5 +143,15 @@ describe("official exam window", () => {
     expect(texts("11:50:00")).toEqual(["closed:ปิดรับเข้าห้องสอบแล้ว (09:30 น.)", "closed:15 นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา"]);
     expect(texts("12:00:00")).toEqual([]);
     expect(roomNotices(s, at("09:10:00"), { lateEntryMinutes: 0, earlyLeaveMinutes: 0, lastLeaveMinutes: 0 })).toEqual([]);
+    expect(roomNotices(s, at("10:00:00"), rules).map((n) => n.text.en)).toEqual(["Entry closed (09:30)", "You may now leave"]);
+  });
+});
+
+describe("checkpoints vs exam length", () => {
+  it("never fires a checkpoint as long as the whole exam (it would talk over the start)", () => {
+    const result = createSession(at("08:50:00"), { startTime: "09:00", endTime: "10:00" });
+    if (!result.ok) throw new Error("expected ok");
+    expect(crossedThresholds(result.session, at("08:59:59"), at("09:00:00"), [60, 30])).toEqual([]);
+    expect(crossedThresholds(result.session, at("09:29:59"), at("09:30:00"), [60, 30])).toEqual([30]);
   });
 });

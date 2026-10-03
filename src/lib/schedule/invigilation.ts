@@ -1,4 +1,5 @@
 import { INVIGILATORS } from "@/config/master-data";
+import type { Bi } from "@/lib/i18n/locale";
 import { THAI_MONTHS } from "@/lib/thai";
 import { cellRef, cellText, getCell, textAt, valueAt, type CellValue, type Grid } from "@/lib/sheets/grid";
 import { cleanText, isoFromSheetDate, parseLooseDate, parseTimeRange } from "@/lib/sheets/text";
@@ -52,7 +53,8 @@ export interface HoursSummary {
   sheet: string;
   columns: SummaryColumn[];
   people: SummaryPerson[];
-  warnings: string[];
+  /** Mistakes in the summary tab worth fixing in the sheet itself. */
+  warnings: Bi[];
 }
 
 export interface InvigilationBook {
@@ -287,7 +289,7 @@ function parseSummaryTab(grid: Grid): HoursSummary | null {
   }
 
   const people: SummaryPerson[] = [];
-  const warnings: string[] = [];
+  const warnings: Bi[] = [];
   for (let row = dateRow + 4; row <= grid.rowCount; row++) {
     const name = textAt(grid, row, 2);
     if (!name || /^total$/i.test(name)) break;
@@ -299,7 +301,10 @@ function parseSummaryTab(grid: Grid): HoursSummary | null {
       assignments.push(index);
       const marked = normalizeInvigilator(mark);
       if (marked && marked !== person) {
-        warnings.push(`แถวของ ${person} ช่อง ${cellRef(row, col)} เขียนว่า "${mark}" — ระบบนับชั่วโมงให้ ${person} ตามสูตรในชีต`);
+        warnings.push({
+          th: `แถวของ ${person} ช่อง ${cellRef(row, col)} เขียนว่า "${mark}" — ระบบนับชั่วโมงให้ ${person} ตามสูตรในชีต`,
+          en: `${person}'s row, cell ${cellRef(row, col)}, says "${mark}" — the hours are counted for ${person}, following the sheet's formula`,
+        });
       }
     }
     assignments.sort((a, b) => a - b);
@@ -307,7 +312,10 @@ function parseSummaryTab(grid: Grid): HoursSummary | null {
     const sheetTotal = totalCol ? numberOf(getCell(grid, row, totalCol)?.value ?? null) : null;
     const hours = sheetTotal === null ? summed : Math.round(sheetTotal * 100) / 100;
     if (sheetTotal !== null && Math.abs(hours - summed) > 0.01) {
-      warnings.push(`ชั่วโมงรวมของ ${person} ในชีต (${hours}) ไม่เท่ากับผลรวมช่องที่ลงชื่อ (${summed}) — ตรวจช่วงสูตรในคอลัมน์ ${cellRef(row, totalCol)}`);
+      warnings.push({
+        th: `ชั่วโมงรวมของ ${person} ในชีต (${hours}) ไม่เท่ากับผลรวมช่องที่ลงชื่อ (${summed}) — ตรวจช่วงสูตรในคอลัมน์ ${cellRef(row, totalCol)}`,
+        en: `${person}'s total in the sheet (${hours}) does not match the sum of the marked cells (${summed}) — check the formula range in ${cellRef(row, totalCol)}`,
+      });
     }
     people.push({ name: person, hours, assignments });
   }

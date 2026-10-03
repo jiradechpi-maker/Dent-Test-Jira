@@ -1,14 +1,25 @@
 import type { Metadata } from "next";
 import { LayoutDashboard } from "lucide-react";
+import { getNavItem } from "@/config/navigation";
 import { PageContainer, PageHeader } from "@/components/common/page-header";
 import { Dashboard } from "@/components/dashboard/dashboard";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "แดชบอร์ด" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t(getNavItem("dashboard").label) };
+}
 
-export default function HomePage() {
+export default async function HomePage() {
+  const t = await getT();
   return (
     <PageContainer>
-      <PageHeader icon={LayoutDashboard} title="แดชบอร์ด" description="งานสนับสนุนวิชาการ คณะทันตแพทยศาสตร์ สจล." className="mb-5" />
+      <PageHeader
+        icon={LayoutDashboard}
+        title={t(getNavItem("dashboard").label)}
+        description={t("งานสนับสนุนวิชาการ คณะทันตแพทยศาสตร์ สจล.", "Academic support · Faculty of Dentistry, KMITL")}
+        className="mb-5"
+      />
       <Dashboard />
     </PageContainer>
   );

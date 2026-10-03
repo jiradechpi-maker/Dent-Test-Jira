@@ -4,9 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { MY_YEAR } from "@/config/data-sources";
+import { getNavItem } from "@/config/navigation";
 import { crossCheckYear, sortIssues } from "@/lib/schedule/checks";
 import { teachingSnapshot } from "@/lib/schedule/diff";
 import { todayInBangkok } from "@/lib/thai";
+import { useT } from "@/components/i18n/locale-provider";
 import { PageContainer, PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -19,6 +21,7 @@ import { TeachingView } from "./teaching-view";
 import { useChangeTracker, useScheduleBundle } from "./use-schedule";
 
 export function ScheduleScreen() {
+  const t = useT();
   const { query, teaching, invigilation, refresh, refreshing, upload, clearUpload, hasUpload, serviceAccountEmail } = useScheduleBundle();
   const [today] = useState(() => todayInBangkok());
 
@@ -40,12 +43,12 @@ export function ScheduleScreen() {
     <PageContainer>
       <PageHeader
         icon={CalendarDays}
-        title={`ตารางสอนชั้นปี ${MY_YEAR}`}
+        title={t(`ตารางสอนชั้นปี ${MY_YEAR}`, `Year ${MY_YEAR} timetable`)}
         description={
           <span className="inline-flex flex-wrap items-center gap-1.5">
-            {schedule?.title ?? "ดึงจาก Google Drive"}
+            {schedule?.title ?? t("ดึงจาก Google Drive", "From Google Drive")}
             <Badge tone="neutral" className="h-5">
-              <ShieldCheck aria-hidden /> อ่านอย่างเดียว · แก้ไขในไฟล์ต้นฉบับ
+              <ShieldCheck aria-hidden /> {t("อ่านอย่างเดียว · แก้ไขในไฟล์ต้นฉบับ", "Read-only · edit in the source file")}
             </Badge>
           </span>
         }
@@ -64,7 +67,11 @@ export function ScheduleScreen() {
           <Skeleton className="h-80 w-full" />
         </div>
       ) : null}
-      {query.isError && !teaching ? <p className="text-[13px] text-danger">โหลดข้อมูลไม่สำเร็จ — กด “ซิงก์เดี๋ยวนี้” เพื่อลองใหม่</p> : null}
+      {query.isError && !teaching ? (
+        <p className="text-[13px] text-danger">
+          {t("โหลดข้อมูลไม่สำเร็จ — กด “ซิงก์เดี๋ยวนี้” เพื่อลองใหม่", "Could not load the data — click “Sync now” to try again")}
+        </p>
+      ) : null}
 
       {teaching && !teaching.ok ? (
         <SourceSetupCard
@@ -85,11 +92,18 @@ export function ScheduleScreen() {
             <Card>
               <CardHeader>
                 <div>
-                  <CardTitle>วันสอบปี {MY_YEAR} ที่ยังไม่ตรงกับตารางคุมสอบ</CardTitle>
-                  <CardDescription>เทียบกับ “ตารางบันทึกเวลาคุมสอบ” อัตโนมัติ — แจ้งเจ้าหน้าที่ผู้ดูแลตารางคุมสอบให้แก้ตาม</CardDescription>
+                  <CardTitle>
+                    {t(`วันสอบปี ${MY_YEAR} ที่ยังไม่ตรงกับตารางคุมสอบ`, `Year ${MY_YEAR} exam dates that do not match the invigilation log`)}
+                  </CardTitle>
+                  <CardDescription>
+                    {t(
+                      "เทียบกับ “ตารางบันทึกเวลาคุมสอบ” อัตโนมัติ — แจ้งเจ้าหน้าที่ผู้ดูแลตารางคุมสอบให้แก้ตาม",
+                      "Checked automatically against the invigilation log (“ตารางบันทึกเวลาคุมสอบ”) — ask the staff member who maintains it to update it",
+                    )}
+                  </CardDescription>
                 </div>
                 <Link href="/exams" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                  ตารางสอบ <ArrowRight aria-hidden />
+                  {t(getNavItem("exams").label)} <ArrowRight aria-hidden />
                 </Link>
               </CardHeader>
               <CardContent>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { getT } from "@/lib/i18n/server";
 import { buildInvitationTemplateData, invitationFileName, invitationProtectedWords } from "@/lib/invitation/template-data";
-import { invitationRequestSchema } from "@/lib/invitation/schema";
+import { makeInvitationRequestSchema } from "@/lib/invitation/schema";
 import { convertDocxToPdf, PdfConversionError } from "@/server/gotenberg";
 import { loadTemplate, prepareDocxForLibreOffice, renderDocx, TemplateRenderError } from "@/server/render-docx";
 
@@ -19,18 +20,20 @@ function errorResponse(status: number, message: string, details: string[] = []) 
 }
 
 export async function POST(request: Request) {
+  // Error messages follow the viewer's language (locale cookie); the document itself is always Thai.
+  const t = await getT();
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return errorResponse(400, "รูปแบบข้อมูลไม่ถูกต้อง");
+    return errorResponse(400, t("รูปแบบข้อมูลไม่ถูกต้อง", "Invalid request format"));
   }
 
-  const parsed = invitationRequestSchema.safeParse(body);
+  const parsed = makeInvitationRequestSchema(t).safeParse(body);
   if (!parsed.success) {
     return errorResponse(
       422,
-      "ข้อมูลไม่ครบถ้วน",
+      t("ข้อมูลไม่ครบถ้วน", "Some required information is missing"),
       parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
     );
   }
@@ -55,9 +58,9 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof PdfConversionError) return errorResponse(error.status, error.message);
-    if (error instanceof TemplateRenderError) return errorResponse(500, error.message, error.details);
+    if (error instanceof PdfConversionError) return errorResponse(error.status, t(error.text));
+    if (error instanceof TemplateRenderError) return errorResponse(500, t(error.text), error.details);
     console.error("[invitation] unexpected error", error);
-    return errorResponse(500, "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่");
+    return errorResponse(500, t("เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่", "An unexpected error occurred. Please try again."));
   }
 }

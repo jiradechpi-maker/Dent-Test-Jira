@@ -6,17 +6,24 @@ import "@fontsource/ibm-plex-sans-thai/700.css";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { Providers } from "./providers";
 
-export const metadata: Metadata = {
-  title: {
-    default: "DentOps · คณะทันตแพทยศาสตร์ สจล.",
-    template: "%s · DentOps",
-  },
-  description: "ระบบบริหารจัดการงานวิชาการและเอกสารอัตโนมัติ คณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
-  applicationName: "DentOps",
-  icons: { icon: "/brand/kmitl-emblem.jpeg" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: {
+      default: t("DentOps · คณะทันตแพทยศาสตร์ สจล.", "DentOps · Faculty of Dentistry, KMITL"),
+      template: "%s · DentOps",
+    },
+    description: t(
+      "ระบบบริหารจัดการงานวิชาการและเอกสารอัตโนมัติ คณะทันตแพทยศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
+      "Academic operations and document automation for the Faculty of Dentistry, King Mongkut's Institute of Technology Ladkrabang",
+    ),
+    applicationName: "DentOps",
+    icons: { icon: "/brand/kmitl-emblem.jpeg" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#4F0080",
@@ -24,11 +31,12 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="th">
+    <html lang={locale}>
       <body>
-        <Providers>{children}</Providers>
+        <Providers locale={locale}>{children}</Providers>
       </body>
     </html>
   );

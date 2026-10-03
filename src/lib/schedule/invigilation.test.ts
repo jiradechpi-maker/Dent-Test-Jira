@@ -61,7 +61,8 @@ describe("hours summary", () => {
       { name: "Nurse", hours: 4, assignments: [0, 1] },
     ]);
     expect(book.summary?.warnings).toHaveLength(1);
-    expect(book.summary?.warnings[0]).toContain("Pim");
+    expect(book.summary?.warnings[0]?.th).toContain("Pim");
+    expect(book.summary?.warnings[0]?.en).toContain('says "Pim"');
   });
 
   it("adds assignments the summary tab has not picked up yet", () => {
@@ -79,7 +80,7 @@ describe("hours summary", () => {
     const people = parseInvigilationWorkbook(grids).summary!.people;
     expect(people.find((p) => p.name === "Nurse")!.hours).toBe(4);
     expect(people.find((p) => p.name === "Mors")!.hours).toBe(3);
-    expect(parseInvigilationWorkbook(grids).summary!.warnings.some((w) => w.includes("Mors") && w.includes("(3)"))).toBe(true);
+    expect(parseInvigilationWorkbook(grids).summary!.warnings.some((w) => w.th.includes("Mors") && w.th.includes("(3)"))).toBe(true);
   });
 
   it("does not count an exam twice when the summary tab lists it at a different time", () => {

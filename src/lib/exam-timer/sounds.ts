@@ -4,7 +4,11 @@
  * conventions: a soft two-tone chime for warnings and a ringing bell for "time is up".
  */
 
-export type ExamSound = "start" | "warning" | "end";
+/**
+ * start/warning/end are the stand-alone signals. When a spoken announcement follows, the shorter
+ * "attention" (one ding-dong) and "end-chime" (no bells) are used so the voice is not talked over.
+ */
+export type ExamSound = "start" | "warning" | "end" | "attention" | "end-chime";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -98,6 +102,19 @@ export function playSound(kind: ExamSound): number {
         strike(ctx, out, t + offset + 0.42, 1046.5, 0.6, 1.8);
       }
       return 3.4;
+    }
+    case "attention": {
+      // One soft ding-dong: E6 → C6
+      strike(ctx, out, t, 1318.5, 0.55, 1.2);
+      strike(ctx, out, t + 0.42, 1046.5, 0.55, 1.5);
+      return 1.6;
+    }
+    case "end-chime": {
+      // The three falling tones of "end", without the bells.
+      strike(ctx, out, t, 1046.5, 0.8, 1.4);
+      strike(ctx, out, t + 0.4, 783.99, 0.8, 1.4);
+      strike(ctx, out, t + 0.8, 523.25, 0.9, 1.8);
+      return 2.4;
     }
     case "end": {
       // Three-tone chime, then two long bell rings — unmistakable "time is up".

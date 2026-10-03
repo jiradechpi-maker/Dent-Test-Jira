@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CircleAlert, Users } from "lucide-react";
 import { INVIGILATORS, RESIGNED_INVIGILATORS } from "@/config/master-data";
+import { formatHoursShort } from "@/lib/i18n/dates";
 import { mediumDay, timeSpan } from "@/lib/schedule/format";
 import { invigilatorLoads, missingFromSummary } from "@/lib/schedule/load";
 import { todayInBangkok } from "@/lib/thai";
@@ -13,11 +14,14 @@ import { useScheduleBundle } from "@/components/schedule/use-schedule";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/components/i18n/locale-provider";
 
 const B55 = new Set(INVIGILATORS.filter((person) => person.priority).map((person) => person.nickname));
 
 export function InvigilatorsScreen() {
   const { query, invigilation, refresh, refreshing, upload, clearUpload, hasUpload, serviceAccountEmail } = useScheduleBundle();
+  const t = useT();
+  const locale = t.locale;
   const [today] = useState(() => todayInBangkok());
   const [selected, setSelected] = useState<string | null>(null);
   const book = invigilation?.ok ? invigilation.data : null;
@@ -28,13 +32,17 @@ export function InvigilatorsScreen() {
   const max = Math.max(1, ...loads.map((load) => load.total));
   const average = loads.length ? loads.reduce((sum, load) => sum + load.recorded, 0) / loads.length : 0;
   const person = loads.find((load) => load.name === selected) ?? null;
+  const summarySheet = book?.summary?.sheet ?? t("สรุป", "Summary");
 
   return (
     <PageContainer>
       <PageHeader
         icon={Users}
-        title="ชั่วโมงคุมสอบ"
-        description="เรียงจากชั่วโมงน้อยไปมาก — คนบนสุดควรได้รับมอบหมายก่อนเพื่อให้ภาระเท่ากัน"
+        title={t("ชั่วโมงคุมสอบ", "Invigilation hours")}
+        description={t(
+          "เรียงจากชั่วโมงน้อยไปมาก — คนบนสุดควรได้รับมอบหมายก่อนเพื่อให้ภาระเท่ากัน",
+          "Sorted from fewest hours to most — assign the person at the top first to keep workloads even",
+        )}
         actions={<RefreshButton onRefresh={refresh} refreshing={refreshing} />}
         className="mb-3"
       />
@@ -62,10 +70,14 @@ export function InvigilatorsScreen() {
           <Card>
             <CardHeader>
               <div>
-                <CardTitle>ชั่วโมงสะสมรายบุคคล</CardTitle>
+                <CardTitle>{t("ชั่วโมงสะสมรายบุคคล", "Hours per person")}</CardTitle>
                 <CardDescription>
-                  ตัวเลขหลัก = ชั่วโมงรวมในแท็บ “{book.summary?.sheet ?? "สรุป"}” (ตรงกับชีต) · <b className="text-brand-600">+</b> = สอบที่จัดไว้แล้วแต่ยังไม่ถึงวัน ·
-                  เรียงจากภาระรวมน้อยไปมาก · เฉลี่ย {average.toFixed(1)} ชม.
+                  {t(`ตัวเลขหลัก = ชั่วโมงรวมในแท็บ “${summarySheet}” (ตรงกับชีต)`, `Main figure = total hours in the “${summarySheet}” tab (as in the sheet)`)} ·{" "}
+                  <b className="text-brand-600">+</b> {t("= สอบที่จัดไว้แล้วแต่ยังไม่ถึงวัน", "= exams scheduled but not yet held")} ·{" "}
+                  {t(
+                    `เรียงจากภาระรวมน้อยไปมาก · เฉลี่ย ${average.toFixed(1)} ชม.`,
+                    `Sorted by total workload, lowest first · average ${average.toFixed(1)} h`,
+                  )}
                 </CardDescription>
               </div>
             </CardHeader>
@@ -83,7 +95,7 @@ export function InvigilatorsScreen() {
                     >
                       <span className="truncate font-medium text-neutral-800">
                         {load.name}
-                        {B55.has(load.name) ? <span className="ml-1 text-[10px] text-brand-600">ตึก 55</span> : null}
+                        {B55.has(load.name) ? <span className="ml-1 text-[10px] text-brand-600">{t("ตึก 55", "Bldg 55")}</span> : null}
                       </span>
                       <span className="flex h-3 overflow-hidden rounded-full bg-neutral-100" aria-hidden>
                         <span className="bg-brand-600" style={{ width: `${(load.recorded / max) * 100}%` }} />
@@ -94,7 +106,7 @@ export function InvigilatorsScreen() {
                         <b className="font-semibold text-neutral-900">{load.recorded}</b>
                         {load.planned ? <span className="ml-1 text-[11px] text-brand-600">+{load.planned}</span> : null}
                         {load.unrecorded ? <span className="ml-1 text-[11px] text-amber-600">+{load.unrecorded}?</span> : null}
-                        <span className="ml-1 text-[11px] text-muted-foreground">ชม.</span>
+                        <span className="ml-1 text-[11px] text-muted-foreground">{t("ชม.", "h")}</span>
                       </span>
                     </button>
                   </li>
@@ -102,7 +114,8 @@ export function InvigilatorsScreen() {
               </ul>
               {resigned.length ? (
                 <p className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
-                  ลาออกแล้ว (ไม่นับในการจัดงาน): {resigned.map((load) => `${load.name} ${load.recorded} ชม.`).join(" · ")}
+                  {t("ลาออกแล้ว (ไม่นับในการจัดงาน)", "Resigned (not assigned new work)")}:{" "}
+                  {resigned.map((load) => `${load.name} ${formatHoursShort(load.recorded, locale)}`).join(" · ")}
                 </p>
               ) : null}
             </CardContent>
@@ -112,11 +125,18 @@ export function InvigilatorsScreen() {
             <Card>
               <CardHeader>
                 <div>
-                  <CardTitle>{person ? `งานที่จัดให้ ${person.name}` : "เลือกชื่อเพื่อดูงานที่จัดไว้"}</CardTitle>
+                  <CardTitle>
+                    {person
+                      ? t(`งานที่จัดให้ ${person.name}`, `Assignments for ${person.name}`)
+                      : t("เลือกชื่อเพื่อดูงานที่จัดไว้", "Select a name to see their assignments")}
+                  </CardTitle>
                   <CardDescription>
                     {person
-                      ? `ในชีต ${person.recorded} ชม. · จัดไว้ล่วงหน้า ${person.planned} ชม.${person.unrecorded ? ` · สอบไปแล้วแต่ยังไม่ลงแท็บสรุป ${person.unrecorded} ชม.` : ""}`
-                      : "งานที่ยังไม่ได้นับในแท็บสรุป"}
+                      ? t(
+                          `ในชีต ${person.recorded} ชม. · จัดไว้ล่วงหน้า ${person.planned} ชม.${person.unrecorded ? ` · สอบไปแล้วแต่ยังไม่ลงแท็บสรุป ${person.unrecorded} ชม.` : ""}`,
+                          `In the sheet: ${person.recorded} h · scheduled ahead: ${person.planned} h${person.unrecorded ? ` · held but not yet in the summary tab: ${person.unrecorded} h` : ""}`,
+                        )
+                      : t("งานที่ยังไม่ได้นับในแท็บสรุป", "Work not yet counted in the summary tab")}
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -128,13 +148,14 @@ export function InvigilatorsScreen() {
                         <li key={entry.id} className={cn("px-3 py-2", entry.date && entry.date < today && "text-neutral-400")}>
                           <p className="font-medium">{entry.title}</p>
                           <p className="text-xs text-muted-foreground tabular">
-                            {entry.date ? mediumDay(entry.date) : "ยังไม่มีวัน"} · {timeSpan(entry.start, entry.end)} · {entry.rooms.join(", ") || "ยังไม่มีห้อง"}
+                            {entry.date ? mediumDay(entry.date, locale) : t("ยังไม่มีวัน", "No date yet")} · {timeSpan(entry.start, entry.end, locale)} ·{" "}
+                            {entry.rooms.join(", ") || t("ยังไม่มีห้อง", "No room yet")}
                           </p>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-[13px] text-muted-foreground">ไม่มีงานค้างนอกแท็บสรุป</p>
+                    <p className="text-[13px] text-muted-foreground">{t("ไม่มีงานค้างนอกแท็บสรุป", "Nothing outstanding outside the summary tab")}</p>
                   )
                 ) : null}
               </CardContent>
@@ -145,10 +166,13 @@ export function InvigilatorsScreen() {
                 <CardHeader>
                   <div>
                     <CardTitle className="flex items-center gap-2">
-                      <CircleAlert className="size-4 text-warning" aria-hidden /> สอบไปแล้วแต่ยังไม่อยู่ในแท็บสรุป
+                      <CircleAlert className="size-4 text-warning" aria-hidden /> {t("สอบไปแล้วแต่ยังไม่อยู่ในแท็บสรุป", "Held but missing from the summary tab")}
                     </CardTitle>
                     <CardDescription>
-                      มีในแท็บรายเดือนแต่ไม่มีคอลัมน์ในแท็บ “{book.summary?.sheet ?? "สรุป"}” — ชั่วโมงนี้ยังไม่ถูกนับในชีต (แสดงเป็นสีเหลือง +?)
+                      {t(
+                        `มีในแท็บรายเดือนแต่ไม่มีคอลัมน์ในแท็บ “${summarySheet}” — ชั่วโมงนี้ยังไม่ถูกนับในชีต (แสดงเป็นสีเหลือง +?)`,
+                        `In a monthly tab but with no column in the “${summarySheet}” tab — these hours are not yet counted in the sheet (shown in amber as +?)`,
+                      )}
                     </CardDescription>
                   </div>
                 </CardHeader>
@@ -156,10 +180,10 @@ export function InvigilatorsScreen() {
                   <ul className="flex flex-col gap-1.5 text-[13px] text-neutral-700">
                     {missing.map(({ entry, people }) => (
                       <li key={entry.id} className="flex gap-2">
-                        <Badge tone="warning">ตรวจ</Badge>
+                        <Badge tone="warning">{t("ตรวจ", "Check")}</Badge>
                         <span>
-                          {entry.date ? mediumDay(entry.date) : ""} {timeSpan(entry.start, entry.end)} · {entry.title} — {people.join(", ")}{" "}
-                          <span className="text-muted-foreground">({entry.sheet} แถว {entry.row})</span>
+                          {entry.date ? mediumDay(entry.date, locale) : ""} {timeSpan(entry.start, entry.end, locale)} · {entry.title} — {people.join(", ")}{" "}
+                          <span className="text-muted-foreground">({t(`${entry.sheet} แถว ${entry.row}`, `${entry.sheet}, row ${entry.row}`)})</span>
                         </span>
                       </li>
                     ))}
@@ -172,15 +196,15 @@ export function InvigilatorsScreen() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <CircleAlert className="size-4 text-warning" aria-hidden /> จุดที่ควรแก้ในชีต
+                    <CircleAlert className="size-4 text-warning" aria-hidden /> {t("จุดที่ควรแก้ในชีต", "Issues to fix in the sheet")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ul className="flex flex-col gap-1.5 text-[13px] text-neutral-700">
                     {book.summary.warnings.map((warning) => (
-                      <li key={warning} className="flex gap-2">
-                        <Badge tone="warning">ตรวจ</Badge>
-                        <span>{warning}</span>
+                      <li key={warning.th} className="flex gap-2">
+                        <Badge tone="warning">{t("ตรวจ", "Check")}</Badge>
+                        <span>{t(warning)}</span>
                       </li>
                     ))}
                   </ul>

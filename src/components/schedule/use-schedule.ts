@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SourceKey } from "@/config/data-sources";
-import type { ScheduleBundle, SourceInfo, SourceResult } from "@/lib/schedule/bundle";
+import { DATA_SOURCES, type SourceKey } from "@/config/data-sources";
+import { errorText, SourceError, type ScheduleBundle, type SourceInfo, type SourceResult } from "@/lib/schedule/bundle";
 import { diffSnapshots, type Change, type Snapshot } from "@/lib/schedule/diff";
 import type { InvigilationBook } from "@/lib/schedule/invigilation";
 import type { TeachingSchedule } from "@/lib/schedule/teaching";
@@ -36,11 +36,11 @@ function readUpload<T>(key: SourceKey): UploadedSource<T> | null {
 }
 
 /** Server data wins whenever Drive is reachable; a manually uploaded .xlsx fills in until then. */
-function resolve<T>(server: SourceResult<T> | undefined, upload: UploadedSource<T> | null): SourceResult<T> | undefined {
+function resolve<T>(key: SourceKey, server: SourceResult<T> | undefined, upload: UploadedSource<T> | null): SourceResult<T> | undefined {
   if (server?.ok || !upload) return server;
   const info: SourceInfo = {
-    key: server?.key ?? "teaching",
-    label: server?.label ?? "",
+    key,
+    label: server?.label ?? DATA_SOURCES[key].label,
     fileId: "",
     fileName: upload.fileName,
     url: server?.url ?? "",
@@ -86,8 +86,9 @@ export function useScheduleBundle() {
     form.set("kind", key);
     form.set("file", file);
     const response = await fetch("/api/schedule/parse", { method: "POST", body: form });
-    const body = (await response.json()) as { error?: string; data?: unknown };
-    if (!response.ok || !body.data) throw new Error(body.error ?? `HTTP ${response.status}`);
+    // The route answers errors in both languages; the upload button shows the user's one.
+    const body = (await response.json()) as { error?: unknown; data?: unknown };
+    if (!response.ok || !body.data) throw new SourceError(errorText(body.error ?? `HTTP ${response.status}`));
     const entry = { fileName: file.name, uploadedAt: new Date().toISOString(), data: body.data };
     try {
       localStorage.setItem(UPLOAD_KEY(key), JSON.stringify(entry));
@@ -106,9 +107,9 @@ export function useScheduleBundle() {
     setUploads((current) => ({ ...current, [key]: null }));
   }, []);
 
-  const teaching = useMemo(() => resolve(query.data?.teaching, uploads.teaching), [query.data?.teaching, uploads.teaching]);
+  const teaching = useMemo(() => resolve("teaching", query.data?.teaching, uploads.teaching), [query.data?.teaching, uploads.teaching]);
   const invigilation = useMemo(
-    () => resolve(query.data?.invigilation, uploads.invigilation),
+    () => resolve("invigilation", query.data?.invigilation, uploads.invigilation),
     [query.data?.invigilation, uploads.invigilation],
   );
 
@@ -126,8 +127,8 @@ export function useScheduleBundle() {
 }
 
 /**
- * Remembers (per browser) what the schedule looked like when the user last pressed "รับทราบ", and lists what
- * changed since. The first visit just records a baseline.
+ * Remembers (per browser) what the schedule looked like when the user last pressed "Mark as seen", and lists
+ * what changed since. The first visit just records a baseline. Stored snapshots are language-neutral.
  */
 export function useChangeTracker(storageKey: string, snapshot: Snapshot | null) {
   const key = `dentops.schedule.seen.${storageKey}`;

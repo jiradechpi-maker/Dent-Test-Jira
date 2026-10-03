@@ -5,6 +5,7 @@
  */
 
 import { parseTime } from "@/lib/thai";
+import type { Bi, Locale } from "@/lib/i18n/locale";
 
 export type TimerPhase = "waiting" | "running" | "ended";
 
@@ -71,35 +72,38 @@ export interface RoomRules {
 
 export interface RoomNotice {
   key: "entry" | "leave" | "last";
-  text: string;
+  text: Bi;
   /** "open" = allowed now, "closed" = not allowed now, "info" = before the exam starts. */
   state: "open" | "closed" | "info";
 }
 
-/** The door rules invigilators announce, worded for the current moment. */
+/** The door rules invigilators announce, worded for the current moment, in Thai and English. */
 export function roomNotices(session: ExamSession, now: number, rules: RoomRules): RoomNotice[] {
   const phase = phaseAt(session, now);
   if (phase === "ended") return [];
   const notices: RoomNotice[] = [];
   const total = session.endAt - session.startAt;
   if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * 60_000 < total) {
-    const until = session.startAt + rules.lateEntryMinutes * 60_000;
-    if (phase === "waiting") notices.push({ key: "entry", state: "info", text: `เข้าห้องสอบได้ถึง ${formatClock(until)} น.` });
-    else if (now < until) notices.push({ key: "entry", state: "open", text: `เข้าห้องสอบได้ถึง ${formatClock(until)} น.` });
-    else notices.push({ key: "entry", state: "closed", text: `ปิดรับเข้าห้องสอบแล้ว (${formatClock(until)} น.)` });
+    const until = formatClock(session.startAt + rules.lateEntryMinutes * 60_000);
+    const openText = { th: `เข้าห้องสอบได้ถึง ${until} น.`, en: `Late entry until ${until}` };
+    if (phase === "waiting") notices.push({ key: "entry", state: "info", text: openText });
+    else if (now < session.startAt + rules.lateEntryMinutes * 60_000) notices.push({ key: "entry", state: "open", text: openText });
+    else notices.push({ key: "entry", state: "closed", text: { th: `ปิดรับเข้าห้องสอบแล้ว (${until} น.)`, en: `Entry closed (${until})` } });
   }
   const leaveFrom = rules.earlyLeaveMinutes > 0 ? session.startAt + rules.earlyLeaveMinutes * 60_000 : session.startAt;
   const leaveUntil = rules.lastLeaveMinutes > 0 ? session.endAt - rules.lastLeaveMinutes * 60_000 : session.endAt;
   if (rules.earlyLeaveMinutes > 0 && leaveFrom < session.endAt) {
-    if (phase === "waiting") notices.push({ key: "leave", state: "info", text: `ออกจากห้องสอบได้ตั้งแต่ ${formatClock(leaveFrom)} น.` });
-    else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: `ยังออกจากห้องสอบไม่ได้ จนถึง ${formatClock(leaveFrom)} น.` });
-    else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: "ออกจากห้องสอบได้แล้ว" });
+    const from = formatClock(leaveFrom);
+    if (phase === "waiting") notices.push({ key: "leave", state: "info", text: { th: `ออกจากห้องสอบได้ตั้งแต่ ${from} น.`, en: `You may leave from ${from}` } });
+    else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: { th: `ยังออกจากห้องสอบไม่ได้ จนถึง ${from} น.`, en: `No leaving until ${from}` } });
+    else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: { th: "ออกจากห้องสอบได้แล้ว", en: "You may now leave" } });
   }
   if (rules.lastLeaveMinutes > 0 && leaveUntil > session.startAt) {
+    const m = rules.lastLeaveMinutes;
     if (now >= leaveUntil && phase === "running") {
-      notices.push({ key: "last", state: "closed", text: `${rules.lastLeaveMinutes} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา` });
+      notices.push({ key: "last", state: "closed", text: { th: `${m} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา`, en: `Final ${m} minutes — please remain seated` } });
     } else if (phase === "waiting") {
-      notices.push({ key: "last", state: "info", text: `งดออกจากห้อง ${rules.lastLeaveMinutes} นาทีสุดท้าย` });
+      notices.push({ key: "last", state: "info", text: { th: `งดออกจากห้อง ${m} นาทีสุดท้าย`, en: `No leaving in the final ${m} minutes` } });
     }
   }
   return notices;
@@ -155,6 +159,17 @@ export function formatClock(ms: number, withSeconds = false): string {
   return `${hh}:${mm}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
+/** 180 min → "3 ชั่วโมง" · "3 hours"; 90 → "1 ชั่วโมงครึ่ง" · "1 h 30 min". */
+export function formatDuration(ms: number, locale: Locale): string {
+  if (locale === "th") return formatDurationThai(ms);
+  const totalMinutes = Math.round(ms / 60_000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h && m) return `${h} h ${m} min`;
+  if (h) return h === 1 ? "1 hour" : `${h} hours`;
+  return m === 1 ? "1 minute" : `${m} minutes`;
+}
+
 export function formatDurationThai(ms: number): string {
   const totalMinutes = Math.round(ms / 60_000);
   if (totalMinutes % 60 === 30 && totalMinutes > 60) return `${Math.floor(totalMinutes / 60)} ชั่วโมงครึ่ง`;
@@ -188,9 +203,11 @@ export function crossedThresholds(session: ExamSession, prevNow: number, now: nu
   if (now <= prevNow) return [];
   const prevLeft = session.endAt - prevNow;
   const left = session.endAt - now;
+  const total = session.endAt - session.startAt;
+  // A checkpoint as long as the whole exam (60 min left in a 60-minute exam) would collide with "you may begin".
   return thresholdsMinutes.filter((m) => {
     const t = m * 60_000;
-    return prevLeft > t && left <= t && left > 0;
+    return t < total && prevLeft > t && left <= t && left > 0;
   });
 }
 

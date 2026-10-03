@@ -214,3 +214,8 @@
     visibility: visible !important;
   }
 }
+
+/* English UI: Latin-first font stack (Inter), Thai glyphs still fall back to IBM Plex Sans Thai. */
+html:lang(en) body {
+  font-family: var(--font-latin);
+}

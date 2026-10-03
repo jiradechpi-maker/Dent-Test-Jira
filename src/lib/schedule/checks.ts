@@ -1,5 +1,6 @@
 import { rangesOverlap, titleTokens } from "@/lib/sheets/text";
 import { RESIGNED_INVIGILATORS } from "@/config/master-data";
+import type { Bi, Locale } from "@/lib/i18n/locale";
 import { shortDay, timeSpan } from "./format";
 import type { ExamEntry, InvigilationBook } from "./invigilation";
 import type { TeachingSchedule, TeachingSession } from "./teaching";
@@ -23,12 +24,12 @@ export interface ScheduleIssue {
   kind: IssueKind;
   severity: IssueSeverity;
   date: string | null;
-  title: string;
-  detail: string;
+  title: Bi;
+  detail: Bi;
   examIds: string[];
   sessionIds: string[];
   /** What to do about it, e.g. free rooms and the least-loaded free invigilators. */
-  suggestion?: string;
+  suggestion?: Bi;
 }
 
 const sameRoom = (a: string, b: string) => a.replace(/\s+/g, "").toLowerCase() === b.replace(/\s+/g, "").toLowerCase();
@@ -37,9 +38,19 @@ function timed(entry: ExamEntry): entry is ExamEntry & { date: string; start: st
   return Boolean(entry.date && entry.start && entry.end);
 }
 
-const label = (entry: ExamEntry) => `${entry.title}${entry.year ? ` (ปี ${entry.year})` : ""}`;
-const when = (date: string | null, start: string | null, end: string | null) =>
-  `${date ? shortDay(date) : "ยังไม่มีวัน"}${start ? ` ${timeSpan(start, end)}` : ""}`;
+/** Build the same sentence once per language (dates and times differ by locale, not only the words). */
+const both = (text: (locale: Locale) => string): Bi => ({ th: text("th"), en: text("en") });
+
+const label = (entry: ExamEntry, locale: Locale) =>
+  `${entry.title}${entry.year ? (locale === "th" ? ` (ปี ${entry.year})` : ` (Year ${entry.year})`) : ""}`;
+const when = (date: string | null, start: string | null, end: string | null, locale: Locale) =>
+  `${date ? shortDay(date, locale) : locale === "th" ? "ยังไม่มีวัน" : "no date yet"}${start ? ` ${timeSpan(start, end, locale)}` : ""}`;
+/** "Anatomy (ปี 4) 09.00–11.00 กับ Pharmacology (ปี 4) 10.00–12.00" */
+const pair = (a: ExamEntry, b: ExamEntry): Bi =>
+  both(
+    (locale) =>
+      `${label(a, locale)} ${timeSpan(a.start, a.end, locale)} ${locale === "th" ? "กับ" : "and"} ${label(b, locale)} ${timeSpan(b.start, b.end, locale)}`,
+  );
 
 /** Clashes between exams: two exams in one room at overlapping times, or one invigilator in two places at once. */
 export function findExamClashes(entries: ExamEntry[]): ScheduleIssue[] {
@@ -62,8 +73,10 @@ export function findExamClashes(entries: ExamEntry[]): ScheduleIssue[] {
           kind: joint ? "shared-room" : "room-clash",
           severity: joint ? "info" : "danger",
           date: a.date,
-          title: joint ? `สอบร่วมห้อง ${rooms.join(", ")}` : `ห้องชน: ${rooms.join(", ")}`,
-          detail: `${label(a)} ${timeSpan(a.start, a.end)} กับ ${label(b)} ${timeSpan(b.start, b.end)}`,
+          title: joint
+            ? { th: `สอบร่วมห้อง ${rooms.join(", ")}`, en: `Shared exam room: ${rooms.join(", ")}` }
+            : { th: `ห้องชน: ${rooms.join(", ")}`, en: `Room clash: ${rooms.join(", ")}` },
+          detail: pair(a, b),
           examIds: [a.id, b.id],
           sessionIds: [],
         });
@@ -74,8 +87,8 @@ export function findExamClashes(entries: ExamEntry[]): ScheduleIssue[] {
           kind: "invigilator-clash",
           severity: "danger",
           date: a.date,
-          title: `กรรมการซ้อนเวลา: ${people.join(", ")}`,
-          detail: `${label(a)} ${timeSpan(a.start, a.end)} กับ ${label(b)} ${timeSpan(b.start, b.end)}`,
+          title: { th: `กรรมการซ้อนเวลา: ${people.join(", ")}`, en: `Double-booked ${people.length > 1 ? "invigilators" : "invigilator"}: ${people.join(", ")}` },
+          detail: pair(a, b),
           examIds: [a.id, b.id],
           sessionIds: [],
         });
@@ -96,8 +109,8 @@ export function findIncompleteExams(entries: ExamEntry[], today: string): Schedu
         kind: "missing-date",
         severity: "warning",
         date: entry.date,
-        title: "ยังไม่ได้วันสอบที่แน่นอน",
-        detail: `${label(entry)}${entry.remark ? ` · ${entry.remark}` : ""}`,
+        title: { th: "ยังไม่ได้วันสอบที่แน่นอน", en: "Exam date not yet confirmed" },
+        detail: both((locale) => `${label(entry, locale)}${entry.remark ? ` · ${entry.remark}` : ""}`),
         examIds: [entry.id],
         sessionIds: [],
       });
@@ -110,21 +123,24 @@ export function findIncompleteExams(entries: ExamEntry[], today: string): Schedu
         kind: "resigned-invigilator",
         severity: "danger",
         date: entry.date,
-        title: `มีกรรมการที่ลาออกแล้ว: ${resigned.join(", ")}`,
-        detail: `${label(entry)} · ${timeSpan(entry.start, entry.end)}`,
+        title: { th: `มีกรรมการที่ลาออกแล้ว: ${resigned.join(", ")}`, en: `Resigned ${resigned.length > 1 ? "invigilators" : "invigilator"} still assigned: ${resigned.join(", ")}` },
+        detail: both((locale) => `${label(entry, locale)} · ${timeSpan(entry.start, entry.end, locale)}`),
         examIds: [entry.id],
         sessionIds: [],
       });
     }
-    const missing = [entry.rooms.length === 0 ? "ห้องสอบ" : null, entry.invigilators.length === 0 ? "กรรมการคุมสอบ" : null].filter(Boolean);
+    const noRoom = entry.rooms.length === 0;
+    const noInvigilators = entry.invigilators.length === 0;
+    const missing = [noRoom ? "ห้องสอบ" : null, noInvigilators ? "กรรมการคุมสอบ" : null].filter(Boolean);
     if (missing.length > 0) {
+      const missingEn = noRoom && noInvigilators ? "Exam room and invigilators" : noRoom ? "Exam room" : "Invigilators";
       issues.push({
         id: `incomplete:${entry.id}`,
-        kind: entry.rooms.length === 0 ? "missing-room" : "missing-invigilator",
+        kind: noRoom ? "missing-room" : "missing-invigilator",
         severity: "warning",
         date: entry.date,
-        title: `ยังไม่ได้จัด${missing.join("และ")}`,
-        detail: `${label(entry)} · ${timeSpan(entry.start, entry.end)}`,
+        title: { th: `ยังไม่ได้จัด${missing.join("และ")}`, en: `${missingEn} not yet assigned` },
+        detail: both((locale) => `${label(entry, locale)} · ${timeSpan(entry.start, entry.end, locale)}`),
         examIds: [entry.id],
         sessionIds: [],
       });
@@ -175,8 +191,11 @@ export function crossCheckYear(book: InvigilationBook, teaching: TeachingSchedul
         kind: "time-mismatch",
         severity: "warning",
         date: entry.date,
-        title: "เวลาสอบไม่ตรงกับตารางสอน",
-        detail: `${entry.title}: ตารางคุมสอบ ${entry.start}–${entry.end} · ตารางสอน ${session.start}–${session.end}`,
+        title: { th: "เวลาสอบไม่ตรงกับตารางสอน", en: "Exam time differs from the timetable" },
+        detail: {
+          th: `${entry.title}: ตารางคุมสอบ ${entry.start}–${entry.end} · ตารางสอน ${session.start}–${session.end}`,
+          en: `${entry.title}: invigilation schedule ${entry.start}–${entry.end} · timetable ${session.start}–${session.end}`,
+        },
         examIds: [entry.id],
         sessionIds: [session.id],
       });
@@ -197,15 +216,22 @@ export function crossCheckYear(book: InvigilationBook, teaching: TeachingSchedul
       )[0];
     if (!moved) continue;
     const session = moved.session;
-    const where = `ตารางสอน ${when(session.date, session.start, session.end)}${session.movedFrom ? ` (ย้ายมาจาก ${shortDay(session.movedFrom)})` : ""}`;
+    const where = (locale: Locale) => {
+      const slot = when(session.date, session.start, session.end, locale);
+      if (locale === "th") return `ตารางสอน ${slot}${session.movedFrom ? ` (ย้ายมาจาก ${shortDay(session.movedFrom, "th")})` : ""}`;
+      return `timetable ${slot}${session.movedFrom ? ` (moved from ${shortDay(session.movedFrom, "en")})` : ""}`;
+    };
     if (matched.has(session.id)) {
       issues.push({
         id: `stale:${entry.id}`,
         kind: "date-mismatch",
         severity: "warning",
         date: entry.date,
-        title: "แถววันสอบเดิมยังค้างในตารางคุมสอบ",
-        detail: `${entry.title}: แถววันที่ ${when(entry.date, entry.start, entry.end)} · ${where} ซึ่งมีแถวของวันใหม่แล้ว — ควรลบแถวเดิม`,
+        title: { th: "แถววันสอบเดิมยังค้างในตารางคุมสอบ", en: "Old exam-date row still in the invigilation schedule" },
+        detail: {
+          th: `${entry.title}: แถววันที่ ${when(entry.date, entry.start, entry.end, "th")} · ${where("th")} ซึ่งมีแถวของวันใหม่แล้ว — ควรลบแถวเดิม`,
+          en: `${entry.title}: row ${entry.date ? "dated" : "with"} ${when(entry.date, entry.start, entry.end, "en")} · ${where("en")} — the new date already has its own row, so delete the old one`,
+        },
         examIds: [entry.id],
         sessionIds: [session.id],
       });
@@ -217,8 +243,11 @@ export function crossCheckYear(book: InvigilationBook, teaching: TeachingSchedul
       kind: "date-mismatch",
       severity: "danger",
       date: entry.date,
-      title: "วันสอบไม่ตรงกับตารางสอน",
-      detail: `${entry.title}: ตารางคุมสอบ ${when(entry.date, entry.start, entry.end)} · ${where}`,
+      title: { th: "วันสอบไม่ตรงกับตารางสอน", en: "Exam date differs from the timetable" },
+      detail: {
+        th: `${entry.title}: ตารางคุมสอบ ${when(entry.date, entry.start, entry.end, "th")} · ${where("th")}`,
+        en: `${entry.title}: invigilation schedule ${when(entry.date, entry.start, entry.end, "en")} · ${where("en")}`,
+      },
       examIds: [entry.id],
       sessionIds: [session.id],
     });
@@ -235,8 +264,8 @@ export function crossCheckYear(book: InvigilationBook, teaching: TeachingSchedul
       // Practical lab exams are usually supervised by the lab's own instructors.
       severity: /\blab\b|laboratory/i.test(session.title) ? "info" : "warning",
       date: session.date,
-      title: "มีสอบในตารางสอน แต่ยังไม่มีในตารางคุมสอบ",
-      detail: `${session.title} · ${timeSpan(session.start, session.end)}${session.course ? ` · ${session.course}` : ""}`,
+      title: { th: "มีสอบในตารางสอน แต่ยังไม่มีในตารางคุมสอบ", en: "Exam in the timetable but not in the invigilation schedule" },
+      detail: both((locale) => `${session.title} · ${timeSpan(session.start, session.end, locale)}${session.course ? ` · ${session.course}` : ""}`),
       examIds: [],
       sessionIds: [session.id],
     });

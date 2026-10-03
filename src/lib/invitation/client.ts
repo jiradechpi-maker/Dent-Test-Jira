@@ -1,12 +1,17 @@
+import { bi, type Bi } from "@/lib/i18n/locale";
 import type { DocumentFormat, InvitationInput } from "./schema";
 
+/**
+ * A failed document request. `text` is what to show (render with t()); messages from the server are
+ * already in the viewer's language (the route reads the locale cookie), so both sides carry the same string.
+ */
 export class DocumentApiError extends Error {
   constructor(
-    message: string,
+    readonly text: Bi,
     readonly status: number,
     readonly details: string[] = [],
   ) {
-    super(message);
+    super(text.th);
     this.name = "DocumentApiError";
   }
 }
@@ -40,20 +45,23 @@ export async function requestInvitation(
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new DocumentApiError("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต", 0);
+    throw new DocumentApiError(
+      bi("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต", "Couldn't reach the server. Please check your internet connection."),
+      0,
+    );
   }
 
   if (!response.ok) {
-    let message = `เกิดข้อผิดพลาด (${response.status})`;
+    let text = bi(`เกิดข้อผิดพลาด (${response.status})`, `Something went wrong (${response.status})`);
     let details: string[] = [];
     try {
       const body = (await response.json()) as { error?: unknown; details?: unknown };
-      if (typeof body.error === "string") message = body.error;
+      if (typeof body.error === "string") text = bi(body.error, body.error);
       if (Array.isArray(body.details)) details = body.details.filter((d): d is string => typeof d === "string");
     } catch {
       // non-JSON error body
     }
-    throw new DocumentApiError(message, response.status, details);
+    throw new DocumentApiError(text, response.status, details);
   }
 
   const blob = await response.blob();

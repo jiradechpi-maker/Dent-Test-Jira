@@ -2,6 +2,9 @@
 
 import { useMemo } from "react";
 import { MoveRight } from "lucide-react";
+import { useT } from "@/components/i18n/locale-provider";
+import { formatTime } from "@/lib/i18n/dates";
+import type { Bi } from "@/lib/i18n/locale";
 import type { OffGridNote, TeachingSession } from "@/lib/schedule/teaching";
 import { addDays, shortDay, timeSpan } from "@/lib/schedule/format";
 import { minutesOf } from "@/lib/sheets/text";
@@ -18,15 +21,15 @@ const KIND_STYLE: Record<TeachingSession["kind"], string> = {
   event: "bg-warning-bg",
 };
 
-export const KIND_LABEL: Record<TeachingSession["kind"], string> = {
-  lecture: "บรรยาย",
-  lab: "แล็บ",
-  exam: "สอบ",
-  clinic: "คลินิก",
-  research: "วิจัย",
-  elective: "วิชาเลือก",
-  holiday: "วันหยุด",
-  event: "กิจกรรม",
+export const KIND_LABEL: Record<TeachingSession["kind"], Bi> = {
+  lecture: { th: "บรรยาย", en: "Lecture" },
+  lab: { th: "แล็บ", en: "Lab" },
+  exam: { th: "สอบ", en: "Exam" },
+  clinic: { th: "คลินิก", en: "Clinic" },
+  research: { th: "วิจัย", en: "Research" },
+  elective: { th: "วิชาเลือก", en: "Elective" },
+  holiday: { th: "วันหยุด", en: "Holiday" },
+  event: { th: "กิจกรรม", en: "Event" },
 };
 
 /** Greedy lane assignment so overlapping sessions (clinic groups, parallel labs) stack instead of covering each other. */
@@ -61,6 +64,7 @@ export function WeekGrid({
   selectedId: string | null;
   onSelect: (session: TeachingSession) => void;
 }) {
+  const t = useT();
   const days = useMemo(() => {
     const all = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
     return all.filter((day, i) => i < 5 || sessions.some((session) => session.date === day));
@@ -81,7 +85,7 @@ export function WeekGrid({
           <div className="relative h-6">
             {hours.map((minute) => (
               <span key={minute} className="absolute top-1 -translate-x-1/2 tabular" style={{ left: pos(minute) }}>
-                {String(minute / 60).padStart(2, "0")}.00
+                {formatTime(`${String(minute / 60).padStart(2, "0")}:00`, t.locale)}
               </span>
             ))}
           </div>
@@ -93,8 +97,8 @@ export function WeekGrid({
           return (
             <div key={day} className={cn("grid grid-cols-[92px_1fr] border-b border-border", isToday && "bg-brand-50/50")}>
               <div className="flex flex-col justify-center px-2 py-2 text-xs">
-                <span className={cn("font-medium text-neutral-800", isToday && "text-brand-700")}>{shortDay(day)}</span>
-                {isToday ? <span className="text-[10px] font-medium text-brand-600">วันนี้</span> : null}
+                <span className={cn("font-medium text-neutral-800", isToday && "text-brand-700")}>{shortDay(day, t.locale)}</span>
+                {isToday ? <span className="text-[10px] font-medium text-brand-600">{t("วันนี้", "Today")}</span> : null}
                 {notesOn(day).length > 0 ? (
                   <button
                     type="button"
@@ -104,7 +108,7 @@ export function WeekGrid({
                       .join("\n")}
                     className="mt-1 w-fit cursor-pointer rounded bg-warning-bg px-1 text-[10px] font-medium text-warning hover:underline"
                   >
-                    นอกตาราง {notesOn(day).length}
+                    {t(`นอกตาราง ${notesOn(day).length}`, `${notesOn(day).length} off-grid`)}
                   </button>
                 ) : null}
               </div>
@@ -117,7 +121,7 @@ export function WeekGrid({
                     key={session.id}
                     type="button"
                     onClick={() => onSelect(session)}
-                    title={`${timeSpan(session.start, session.end)} · ${session.title}`}
+                    title={`${timeSpan(session.start, session.end, t.locale)} · ${session.title}`}
                     className={cn(
                       "absolute flex cursor-pointer flex-col overflow-hidden rounded-md border border-black/5 px-1.5 py-1 text-left text-[11px] leading-tight text-neutral-800 shadow-[var(--shadow-sm)] transition-shadow outline-none hover:shadow-[var(--shadow-md)] focus-visible:shadow-[var(--shadow-focus)]",
                       !session.color && KIND_STYLE[session.kind],
@@ -133,11 +137,11 @@ export function WeekGrid({
                       backgroundColor: session.color && session.kind !== "holiday" ? `#${session.color}` : undefined,
                     }}
                   >
-                    <span className="font-medium tabular text-neutral-600">{timeSpan(session.start, session.end)}</span>
+                    <span className="font-medium tabular text-neutral-600">{timeSpan(session.start, session.end, t.locale)}</span>
                     <span className="line-clamp-2">{session.title}</span>
                     {session.movedFrom ? (
                       <span className="absolute top-1 right-1 rounded bg-warning px-1 text-[9px] font-semibold text-white">
-                        <MoveRight className="inline size-2.5" aria-label="ย้ายวัน" />
+                        <MoveRight className="inline size-2.5" aria-label={t("ย้ายวัน", "Moved")} />
                       </span>
                     ) : null}
                   </button>

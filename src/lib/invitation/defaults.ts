@@ -1,3 +1,4 @@
+import { bi, type Bi } from "@/lib/i18n/locale";
 import { parseIsoDate, todayInBangkok, toBuddhistYear } from "@/lib/thai";
 import { invitationSchema, type InvitationInput, type ScheduleItemInput } from "./schema";
 
@@ -107,13 +108,16 @@ export function keepCoordinator(from: InvitationInput, into: InvitationInput): I
 const BUILDING_55 = "อาคารเฉลิมพระเกียรติ 55 พรรษา สมเด็จพระเทพรัตนราชสุดาฯ สยามบรมราชกุมารี";
 const CLINIC_BUILDING = "อาคารคลินิกทันตกรรม";
 
-/** Quick-fill venues. DT01/DT03/DT05 are on floor 8 of building 55; clinic-building floors are not printed. */
-export const VENUE_PRESETS: { label: string; value: string }[] = [
-  { label: "DT01 · ตึก 55", value: `ห้อง DT01 ชั้น 8 ${BUILDING_55}` },
-  { label: "DT03 · ตึก 55", value: `ห้อง DT03 ชั้น 8 ${BUILDING_55}` },
-  { label: "DT05 · ตึก 55", value: `ห้อง DT05 ชั้น 8 ${BUILDING_55}` },
-  { label: "Conference room 1 (401)", value: `ห้อง Conference room 1 (401) ${CLINIC_BUILDING}` },
-  { label: "Lecture 1", value: `ห้อง Lecture 1 ${CLINIC_BUILDING}` },
-  { label: "Lecture 3", value: `ห้อง Lecture 3 ${CLINIC_BUILDING}` },
-  { label: "Common Lab", value: `ห้อง Common Lab ${CLINIC_BUILDING}` },
+/**
+ * Quick-fill venues. DT01/DT03/DT05 are on floor 8 of building 55; clinic-building floors are not printed.
+ * The label is UI (both languages); the value is printed in the Thai letter and stays Thai.
+ */
+export const VENUE_PRESETS: { label: Bi; value: string }[] = [
+  { label: bi("DT01 · ตึก 55", "DT01 · Building 55"), value: `ห้อง DT01 ชั้น 8 ${BUILDING_55}` },
+  { label: bi("DT03 · ตึก 55", "DT03 · Building 55"), value: `ห้อง DT03 ชั้น 8 ${BUILDING_55}` },
+  { label: bi("DT05 · ตึก 55", "DT05 · Building 55"), value: `ห้อง DT05 ชั้น 8 ${BUILDING_55}` },
+  { label: bi("Conference room 1 (401)", "Conference room 1 (401)"), value: `ห้อง Conference room 1 (401) ${CLINIC_BUILDING}` },
+  { label: bi("Lecture 1", "Lecture 1"), value: `ห้อง Lecture 1 ${CLINIC_BUILDING}` },
+  { label: bi("Lecture 3", "Lecture 3"), value: `ห้อง Lecture 3 ${CLINIC_BUILDING}` },
+  { label: bi("Common Lab", "Common Lab"), value: `ห้อง Common Lab ${CLINIC_BUILDING}` },
 ];
