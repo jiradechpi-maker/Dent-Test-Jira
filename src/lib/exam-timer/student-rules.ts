@@ -48,7 +48,7 @@ export function studentRuleCards(rules: RoomRules, options: StudentRulesSettings
     {
       id: "id-card",
       title: { th: "บัตรแสดงตน", en: "ID card" },
-      text: { th: "วางบัตรนักศึกษาไว้บนโต๊ะ (หรือบัตรประชาชน / บัตรที่มีรูปถ่าย)", en: "Student ID card on the desk (or national ID / photo ID)" },
+      text: { th: "วางบัตรนักศึกษาไว้บนโต๊ะ (หรือบัตรประชาชน / บัตรราชการ)", en: "Student ID card on the desk (or national / official photo ID)" },
     },
     {
       id: "phone",
@@ -59,7 +59,7 @@ export function studentRuleCards(rules: RoomRules, options: StudentRulesSettings
       id: "items",
       title: { th: "สิ่งของต้องห้าม", en: "Prohibited items" },
       text: options.calculatorAllowed
-        ? { th: "ห้ามนำตำราและเอกสารเข้าห้อง · วิชานี้อนุญาตให้ใช้เครื่องคิดเลข", en: "No books or notes · calculators allowed in this exam" }
+        ? { th: "ห้ามตำรา เอกสาร นาฬิกาอัจฉริยะ · ใช้เครื่องคิดเลขได้", en: "No books, notes or smartwatches · calculators allowed" }
         : { th: "ห้ามนำตำรา เอกสาร เครื่องคิดเลข และนาฬิกาอัจฉริยะเข้าห้อง", en: "No books, notes, calculators or smartwatches" },
     },
     {
@@ -99,7 +99,7 @@ export function noticeSections(rules: RoomRules, options: StudentRulesSettings):
         entry,
         {
           th: `ไม่อนุญาตให้ออกจากห้องสอบภายใน ${leave.th}แรก นับจากเวลาเริ่มสอบ เว้นแต่มีเหตุฉุกเฉิน ซึ่งอยู่ในดุลยพินิจของกรรมการคุมสอบ`,
-          en: `No one may leave within the first ${leave.en} of the exam, except in an emergency at the invigilator's discretion.`,
+          en: `No one may leave within the first ${rules.earlyLeaveMinutes === 60 ? "hour" : leave.en} of the exam, except in an emergency at the invigilator's discretion.`,
         },
       ],
     },
@@ -135,7 +135,7 @@ export function noticeSections(rules: RoomRules, options: StudentRulesSettings):
     },
     {
       id: "items",
-      title: { th: "สิ่งของและอุปกรณ์สื่อสาร", en: "Items and electronic devices" },
+      title: { th: "สิ่งของและอุปกรณ์สื่อสาร", en: "Items and communication devices" },
       items: [
         options.calculatorAllowed
           ? {
@@ -148,7 +148,7 @@ export function noticeSections(rules: RoomRules, options: StudentRulesSettings):
             },
         {
           th: "ปิดโทรศัพท์มือถือและอุปกรณ์สื่อสารให้เรียบร้อย และวางไว้ใต้เก้าอี้ที่นั่งสอบเท่านั้น ห้ามนำวิทยุสื่อสารหรือกล้องถ่ายรูปเข้าห้องสอบโดยเด็ดขาด",
-          en: "Switch off mobile phones and other devices and keep them under your chair. Radios and cameras are strictly forbidden.",
+          en: "Switch off mobile phones and other communication devices, and keep them under your seat only. Two-way radios and cameras are strictly forbidden.",
         },
         { th: "สถาบันไม่รับผิดชอบต่อทรัพย์สินที่สูญหาย", en: "The Institute is not responsible for lost property." },
       ],

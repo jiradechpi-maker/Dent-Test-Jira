@@ -200,6 +200,8 @@ export function ExamTimer() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  /** The date printed on the A4 notice — today unless the office prints ahead for another day. Not saved. */
+  const [noticeDate, setNoticeDate] = useState("");
 
   const displayRef = useRef<HTMLDivElement>(null);
   const prevNowRef = useRef<number>(0);
@@ -223,6 +225,7 @@ export function ExamTimer() {
     }
     prevNowRef.current = current;
     setNow(current);
+    setNoticeDate(todayInBangkok(new Date(current)));
     setHydrated(true);
   }, []);
 
@@ -458,6 +461,8 @@ export function ExamTimer() {
     const next = { ...current, endAt: Math.max(current.endAt, getNow()) + minutes * 60_000 };
     sessionRef.current = next;
     setSession(next);
+    // "เหลือเวลาสอบอีก 5 นาที" is no longer true once time is added.
+    dismiss();
     toast.success(t(`ขยายเวลาสอบ +${minutes} นาที`, `Extended by ${minutes} minutes`));
   };
 
@@ -566,7 +571,7 @@ export function ExamTimer() {
         <ExamNoticePrint
           title={settings.title}
           room={settings.room}
-          date={today}
+          date={noticeDate}
           startTime={settings.startTime}
           endTime={settings.endTime}
           rules={rules}
@@ -828,13 +833,21 @@ export function ExamTimer() {
               checked={settings.studentRules.calculatorAllowed}
               onCheckedChange={(calculatorAllowed) => setStudentRules({ calculatorAllowed })}
             />
-            <Button variant="secondary" onClick={() => window.print()} className="w-full">
-              <Printer aria-hidden /> {t("พิมพ์ประกาศข้อปฏิบัติ (A4)", "Print the rules notice (A4)")}
-            </Button>
+            <div className="flex items-end gap-2">
+              <div className="flex w-40 shrink-0 flex-col gap-1">
+                <Label htmlFor="notice-date" className="text-xs font-normal text-muted-foreground">
+                  {t("วันที่สอบ (ในประกาศ)", "Exam date (on the notice)")}
+                </Label>
+                <Input id="notice-date" type="date" value={noticeDate} onChange={(e) => setNoticeDate(e.target.value)} className="h-9 text-sm tabular" />
+              </div>
+              <Button variant="secondary" onClick={() => window.print()} className="h-9 flex-1">
+                <Printer aria-hidden /> {t("พิมพ์ประกาศ (A4)", "Print notice (A4)")}
+              </Button>
+            </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {t(
-                "ฉบับเต็ม 2 ภาษา ใส่ชื่อวิชา ห้อง วันเวลาให้เอง — ติดหน้าห้องสอบ หรืออ่านให้นักศึกษาฟังก่อนเริ่มสอบ (เลือก “บันทึกเป็น PDF” ได้)",
-                "The full notice in Thai and English, with the exam, room, date and time filled in — post it at the door or read it out (you can also “Save as PDF”)",
+                "ประกาศข้อปฏิบัติฉบับเต็ม 2 ภาษา ใส่ชื่อวิชา ห้อง และเวลาจากขั้นตอน 1–2 กับวันที่ด้านบน — พิมพ์ล่วงหน้าได้ ติดหน้าห้องสอบ หรืออ่านให้นักศึกษาฟังก่อนเริ่มสอบ (เลือก “บันทึกเป็น PDF” ได้)",
+                "The full rules notice in Thai and English, with the exam, room and time from steps 1–2 and the date above — print it ahead, post it at the door or read it out (you can also “Save as PDF”)",
               )}
             </p>
           </CardContent>

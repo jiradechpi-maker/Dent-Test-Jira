@@ -15,4 +15,10 @@ describe("saved 5-minute warning settings", () => {
       chime: "triple",
     });
   });
+
+  it("gives back the chime to rooms that had chosen voice only, so the warning is not silent", () => {
+    expect(normalizeAnnounce({ fiveMinutes: true, text: "", voiceUri: "prem", rate: 0.9, chime: "none" }).chime).toBe(DEFAULT_ANNOUNCE.chime);
+    // Chosen in this version (no voice fields saved): stays off.
+    expect(normalizeAnnounce({ fiveMinutes: true, text: "", chime: "none" }).chime).toBe("none");
+  });
 });

@@ -21,11 +21,14 @@ export const DEFAULT_ANNOUNCE: AnnounceSettings = {
 
 /** Settings saved by any version, including the ones that also stored a voice and a speaking speed. */
 export function normalizeAnnounce(value: unknown): AnnounceSettings {
-  const v = (typeof value === "object" && value !== null ? value : {}) as Partial<AnnounceSettings>;
+  const v = (typeof value === "object" && value !== null ? value : {}) as Partial<AnnounceSettings> & { voiceUri?: unknown; rate?: unknown };
+  let chime = (CHIME_STYLES as readonly string[]).includes(v.chime as string) ? (v.chime as ChimeStyle) : DEFAULT_ANNOUNCE.chime;
+  // In the version that spoke, "no chime" meant "voice only"; with the voice gone it would leave the warning silent.
+  if (chime === "none" && ("voiceUri" in v || "rate" in v)) chime = DEFAULT_ANNOUNCE.chime;
   return {
     fiveMinutes: typeof v.fiveMinutes === "boolean" ? v.fiveMinutes : DEFAULT_ANNOUNCE.fiveMinutes,
     text: typeof v.text === "string" ? v.text : "",
-    chime: (CHIME_STYLES as readonly string[]).includes(v.chime as string) ? (v.chime as ChimeStyle) : DEFAULT_ANNOUNCE.chime,
+    chime,
   };
 }
 

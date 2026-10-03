@@ -309,8 +309,14 @@ function RulesBoard({ board, dark }: { board: StudentRule[]; dark: boolean }) {
                 aria-hidden
               />
               <div className="min-w-0">
-                <p lang="th" className="text-[min(1.8cqw,6.2cqh)] leading-tight font-semibold">
-                  {rule.title.th}
+                {/* One line: the English title gives way (ellipsis) before the heading ever wraps. */}
+                <p className="flex min-w-0 items-baseline gap-[0.6cqw] leading-tight whitespace-nowrap">
+                  <span lang="th" className="shrink-0 text-[min(1.8cqw,6.2cqh)] font-semibold">
+                    {rule.title.th}
+                  </span>
+                  <span lang="en" className={cn("min-w-0 truncate font-[family-name:var(--font-latin)] text-[min(1.2cqw,4.1cqh)] font-medium", dark ? "text-white/55" : "text-neutral-500")}>
+                    · {rule.title.en}
+                  </span>
                 </p>
                 <p lang="th" className={cn("mt-[0.4cqw] text-[min(1.55cqw,5.4cqh)] leading-snug", dark ? "text-white/90" : "text-neutral-800")}>
                   {rule.text.th}
