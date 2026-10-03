@@ -8,6 +8,7 @@ import {
   formatTimeRange,
   toArabicDigits,
 } from "@/lib/thai";
+import { nameTokens } from "@/lib/thai-wrap";
 import type { CoordinatorTitle, InvitationInput } from "./schema";
 
 /** Every value the .docx template consumes. All strings are final, print-ready text. */
@@ -50,6 +51,22 @@ export function totalScheduleHours(schedule: InvitationInput["schedule"]): numbe
   return Math.round(schedule.reduce((sum, item) => sum + item.hours, 0) * 100) / 100;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Exam points one session asks for: the user's own figure, else hours × points per hour. */
+export function sessionExamPoints(item: InvitationInput["schedule"][number], pointsPerHour: number): number {
+  return round2(item.examPoints ?? item.hours * pointsPerHour);
+}
+
+/** Lecture hours (sessions that ask for exam points) and the total points to request. */
+export function examTotals(schedule: InvitationInput["schedule"], pointsPerHour: number): { lectureHours: number; points: number } {
+  const lectures = schedule.filter((item) => sessionExamPoints(item, pointsPerHour) > 0);
+  return {
+    lectureHours: totalScheduleHours(lectures),
+    points: round2(lectures.reduce((sum, item) => sum + sessionExamPoints(item, pointsPerHour), 0)),
+  };
+}
+
 export function buildInvitationTemplateData(input: InvitationInput): InvitationTemplateData {
   const th = input.thaiDigits;
   const d = (value: string | number) => digits(toArabicDigits(String(value)), th);
@@ -57,8 +74,7 @@ export function buildInvitationTemplateData(input: InvitationInput): InvitationT
   const sorted = [...input.schedule].sort((a, b) =>
     a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date),
   );
-  const totalHours = totalScheduleHours(sorted);
-  const totalPoints = Math.round(totalHours * input.pointsPerHour * 100) / 100;
+  const exam = examTotals(sorted, input.pointsPerHour);
 
   // Without a day, the space left of the month (as in the original) is where the registry writes it by hand.
   const issueDate = formatLetterDate(input.issueDate, { includeDay: input.includeIssueDay, thaiDigits: th });
@@ -91,11 +107,16 @@ export function buildInvitationTemplateData(input: InvitationInput): InvitationT
     hasExam: input.includeExamSection,
     pointsPerHour: formatHours(input.pointsPerHour, th),
     one: d(1),
-    totalHours: formatHours(totalHours, th),
-    totalPoints: formatHours(totalPoints, th),
+    totalHours: formatHours(exam.lectureHours, th),
+    totalPoints: formatHours(exam.points, th),
     examChoices: d(5),
     examDeadline: input.includeExamSection ? formatFullThaiDate(input.examDeadline, th) : "",
   };
+}
+
+/** Names that must never be split across lines: the lecturer, the coordinator and the signer. */
+export function invitationProtectedWords(input: InvitationInput): string[] {
+  return nameTokens(input.lecturerName, input.coordinatorName, ORGANIZATION.signer.name);
 }
 
 /** Safe, descriptive download name, e.g. "หนังสือเชิญ_Endodontics II_อ.สมชาย.docx". */

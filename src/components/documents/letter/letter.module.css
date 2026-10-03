@@ -1,0 +1,144 @@
+/*
+ * A4 page replica of templates/invitation-letter.docx. Every distance below is taken from
+ * scripts/build-invitation-template.ts (which was measured on the faculty's original letter).
+ */
+.page {
+  position: relative;
+  box-sizing: border-box;
+  width: 21cm;
+  height: 29.7cm;
+  padding: 1.5cm 2cm 1.8cm 3cm;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: "DentOps Sarabun", "TH Sarabun New", "TH SarabunPSK", serif;
+  font-size: 16pt;
+  font-weight: 400;
+  line-height: 20.8pt;
+  text-align: left;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  isolation: isolate; /* lets the emblem sit behind the text, as in the .docx */
+  break-after: page;
+  page-break-after: always;
+}
+.page:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.page * {
+  margin: 0;
+  padding: 0;
+  overflow-wrap: break-word;
+  line-break: strict;
+}
+.page p,
+.page div {
+  min-height: 20.8pt;
+}
+
+/* Words that must never be split across lines (see src/lib/thai-wrap.ts). */
+.keep {
+  white-space: nowrap;
+}
+
+.bold {
+  font-weight: 700;
+}
+.underline {
+  text-decoration: underline;
+  text-underline-offset: 2pt;
+}
+.center {
+  text-align: center;
+}
+.justify {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+/* ── Page 1 ─────────────────────────────────────── */
+.emblem {
+  position: absolute;
+  left: 8.733cm; /* left margin 3 cm + 5.733 cm column offset */
+  top: 1.55cm;
+  width: 3.334cm;
+  height: 3.334cm;
+  z-index: -1;
+}
+.headerSpacer {
+  padding: 12pt 0 !important;
+  box-sizing: content-box;
+}
+.letterhead {
+  display: grid;
+  grid-template-columns: 8.73cm auto;
+  margin-right: -2.081cm !important; /* the original's −2.08 cm right indent */
+}
+.date {
+  padding-top: 12pt !important;
+  padding-left: 8.4cm !important;
+}
+.hanging {
+  padding-top: 12pt !important;
+  padding-left: 1.27cm !important;
+  text-indent: -1.27cm;
+}
+.label {
+  display: inline-block;
+  width: 1.27cm;
+  text-indent: 0;
+}
+.body {
+  padding-top: 12pt !important;
+  text-indent: 2.54cm;
+}
+.closing {
+  padding-top: 41.6pt !important;
+}
+.footer {
+  position: absolute;
+  left: 3cm;
+  bottom: 0.6cm;
+}
+
+/* ── Attachment ─────────────────────────────────── */
+.title {
+  font-size: 20pt;
+  font-weight: 700;
+}
+.gapBefore {
+  padding-top: 12pt !important;
+}
+.gapAfter {
+  padding-bottom: 12pt !important;
+}
+.gapBeforeSmall {
+  padding-top: 6pt !important;
+}
+.table {
+  margin-left: 0.247cm !important;
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 15.748cm; /* 3.745 + 9.503 + 2.5 */
+}
+.table th,
+.table td {
+  border: 0.5pt solid #000;
+  padding: 0.0706cm 0.1905cm !important;
+  vertical-align: middle;
+}
+.table th {
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+.colDate {
+  width: 3.745cm;
+}
+.colTopic {
+  width: 9.503cm;
+}
+.colHours {
+  width: 2.5cm;
+}

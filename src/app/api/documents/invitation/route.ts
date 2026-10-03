@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildInvitationTemplateData, invitationFileName } from "@/lib/invitation/template-data";
+import { buildInvitationTemplateData, invitationFileName, invitationProtectedWords } from "@/lib/invitation/template-data";
 import { invitationRequestSchema } from "@/lib/invitation/schema";
 import { convertDocxToPdf, PdfConversionError } from "@/server/gotenberg";
 import { loadTemplate, prepareDocxForLibreOffice, renderDocx, TemplateRenderError } from "@/server/render-docx";
@@ -42,7 +42,9 @@ export async function POST(request: Request) {
     const docx = renderDocx(template, buildInvitationTemplateData(data));
     const fileName = invitationFileName(data, format);
     const payload =
-      format === "pdf" ? await convertDocxToPdf(prepareDocxForLibreOffice(docx), invitationFileName(data, "docx")) : docx;
+      format === "pdf"
+        ? await convertDocxToPdf(prepareDocxForLibreOffice(docx, invitationProtectedWords(data)), invitationFileName(data, "docx"))
+        : docx;
 
     return new NextResponse(new Uint8Array(payload), {
       status: 200,

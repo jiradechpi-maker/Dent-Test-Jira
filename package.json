@@ -29,6 +29,8 @@
     "dayjs": "^1.11.23",
     "docxtemplater": "^3.71.0",
     "exceljs": "^4.4.0",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.50.0",
     "next": "^15.5.27",
     "pizzip": "^3.3.0",
