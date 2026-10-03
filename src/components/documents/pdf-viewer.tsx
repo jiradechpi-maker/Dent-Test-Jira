@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/components/i18n/locale-provider";
 
 // Worker is copied to /public on install (scripts/copy-pdf-worker.mjs) so it always matches the library.
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 /** Renders the real PDF (exactly what will be downloaded/printed) page by page. */
 export default function PdfViewer({ file, onPages }: { file: Blob; onPages?: (count: number) => void }) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
   const [pages, setPages] = useState(0);
@@ -29,7 +31,7 @@ export default function PdfViewer({ file, onPages }: { file: Blob; onPages?: (co
     <div ref={containerRef} className="w-full">
       {error ? (
         <p role="alert" className="rounded-lg bg-danger-bg p-4 text-sm text-danger">
-          แสดงพรีวิวไม่สำเร็จ: {error}
+          {t("แสดงพรีวิวไม่สำเร็จ", "Couldn't display the preview")}: {error}
         </p>
       ) : (
         <Document

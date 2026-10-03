@@ -11,12 +11,14 @@ import {
   type CatalogSemester,
   type CourseCatalogItem,
 } from "@/data/course-catalog";
+import { useT } from "@/components/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 /** Six cohort chips in their sheet colours. */
 export function YearTabs({ value, onChange, counts }: { value: number; onChange: (year: number) => void; counts?: Record<number, number> }) {
+  const t = useT();
   return (
-    <div role="radiogroup" aria-label="ชั้นปี" className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+    <div role="radiogroup" aria-label={t("ชั้นปี", "Student year")} className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
       {YEAR_COLORS.map((color) => {
         const selected = color.year === value;
         return (
@@ -32,7 +34,7 @@ export function YearTabs({ value, onChange, counts }: { value: number; onChange:
             )}
             style={selected ? { background: color.solid } : { color: color.fg, background: color.bg }}
           >
-            ปี {color.year}
+            {t(`ปี ${color.year}`, `Year ${color.year}`)}
             {counts ? <span className={cn("text-[11px] tabular", selected ? "text-white/75" : "opacity-60")}>{counts[color.year] ?? 0}</span> : null}
           </button>
         );
@@ -42,6 +44,7 @@ export function YearTabs({ value, onChange, counts }: { value: number; onChange:
 }
 
 export function YearBadge({ year, className }: { year: number | null | undefined; className?: string }) {
+  const t = useT();
   const color = yearColor(year);
   if (!color) return null;
   return (
@@ -49,12 +52,13 @@ export function YearBadge({ year, className }: { year: number | null | undefined
       className={cn("inline-flex h-5 shrink-0 items-center rounded-[var(--radius-chip)] px-1.5 text-[11px] font-medium whitespace-nowrap", className)}
       style={{ background: color.bg, color: color.fg }}
     >
-      ปี {color.year}
+      {t(`ปี ${color.year}`, `Year ${color.year}`)}
     </span>
   );
 }
 
 function CourseRow({ course, selected, showYear, onPick }: { course: CourseCatalogItem; selected: boolean; showYear: boolean; onPick: () => void }) {
+  const t = useT();
   return (
     <li>
       <button
@@ -73,7 +77,7 @@ function CourseRow({ course, selected, showYear, onPick }: { course: CourseCatal
         <span className="flex items-center gap-1.5">
           {showYear ? <YearBadge year={course.year} /> : null}
           {course.category && course.category !== "core" ? (
-            <span className="text-[10px] text-muted-foreground">{CATEGORY_LABEL[course.category]}</span>
+            <span className="text-[10px] text-muted-foreground">{t(CATEGORY_LABEL[course.category])}</span>
           ) : null}
           {selected ? <Check className="size-3.5 text-brand-600" aria-hidden /> : null}
         </span>
@@ -101,6 +105,7 @@ export function CoursePicker({
   selectedName: string;
   onPick: (course: CourseCatalogItem) => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const results = useMemo(() => searchCourses(query), [query]);
   const yearCourses = useMemo(() => coursesFor(year), [year]);
@@ -116,7 +121,7 @@ export function CoursePicker({
 
       <div className="flex flex-wrap items-center gap-2">
         {!query.trim() ? (
-          <div role="radiogroup" aria-label="ภาคเรียน" className="inline-flex rounded-[var(--radius-control)] bg-neutral-100 p-0.5">
+          <div role="radiogroup" aria-label={t("ภาคเรียน", "Semester")} className="inline-flex rounded-[var(--radius-control)] bg-neutral-100 p-0.5">
             {tabs.map((tab) => {
               const selected = tab.value === activeSemester;
               const count = yearCourses.filter((c) => c.semester === tab.value).length;
@@ -132,27 +137,27 @@ export function CoursePicker({
                     selected ? "bg-card text-neutral-900 shadow-[var(--shadow-sm)]" : "text-neutral-500 hover:text-neutral-800",
                   )}
                 >
-                  {tab.short} <span className="text-[11px] text-muted-foreground tabular">{count}</span>
+                  {t(tab.short)} <span className="text-[11px] text-muted-foreground tabular">{count}</span>
                 </button>
               );
             })}
           </div>
         ) : null}
         <label className="relative ml-auto min-w-[180px] flex-1 sm:max-w-[260px]">
-          <span className="sr-only">ค้นหารายวิชา</span>
+          <span className="sr-only">{t("ค้นหารายวิชา", "Search courses")}</span>
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-neutral-400" aria-hidden />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ค้นหาชื่อ/รหัสวิชา ทุกชั้นปี"
+            placeholder={t("ค้นหาชื่อ/รหัสวิชา ทุกชั้นปี", "Search by name or code, all years")}
             className="h-8 w-full rounded-[var(--radius-control)] border border-border bg-card pr-7 pl-8 text-xs outline-none placeholder:text-neutral-400 focus-visible:border-brand-400 focus-visible:shadow-[var(--shadow-focus)]"
           />
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
-              aria-label="ล้างคำค้น"
+              aria-label={t("ล้างคำค้น", "Clear search")}
               className="absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-neutral-400 hover:text-neutral-700"
             >
               <X className="size-3.5" aria-hidden />
@@ -181,7 +186,9 @@ export function CoursePicker({
             ))}
           </ul>
         ) : (
-          <p className="px-3 py-4 text-center text-xs text-muted-foreground">ไม่พบรายวิชา — พิมพ์ชื่อวิชาเองในช่องด้านล่างได้</p>
+          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+            {t("ไม่พบรายวิชา — พิมพ์ชื่อวิชาเองในช่องด้านล่างได้", "No matching course — you can type the course name in the field below")}
+          </p>
         )}
       </div>
     </div>

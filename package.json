@@ -1,8 +1,8 @@
 {
-  "name": "dentops",
+  "name": "dentboard",
   "version": "0.1.0",
   "private": true,
-  "description": "DentOps — Integrated Academic Operations & Document Automation System, Faculty of Dentistry KMITL",
+  "description": "Dentboard — Integrated Academic Operations & Document Automation System, Faculty of Dentistry KMITL",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

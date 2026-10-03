@@ -1,4 +1,5 @@
 import { buildingForYear, INVIGILATORS, RESIGNED_INVIGILATORS, ROOM_RULES, type RoomRule } from "@/config/master-data";
+import type { Bi } from "@/lib/i18n/locale";
 import { rangesOverlap } from "@/lib/sheets/text";
 import type { ScheduleIssue } from "./checks";
 import type { ExamEntry } from "./invigilation";
@@ -49,6 +50,12 @@ export function suggestInvigilators(entry: ExamEntry, entries: ExamEntry[], load
 
 const roomLabel = (rule: RoomRule) => rule.rooms.join(" + ");
 
+/** Join each language's parts on its own. */
+const joinBi = (parts: Bi[], separator: string): Bi => ({
+  th: parts.map((part) => part.th).join(separator),
+  en: parts.map((part) => part.en).join(separator),
+});
+
 /**
  * Add a concrete next step to issues about rooms and invigilators. Suggestions are made in date order and
  * each one is pencilled in before the next, so two open exams at the same time never get the same room or person.
@@ -65,14 +72,19 @@ export function withSuggestions(issues: ScheduleIssue[], entries: ExamEntry[], l
     // For a clash, move the second exam (usually the one booked later).
     const entry = byId.get(issue.examIds.at(-1) ?? "");
     if (!entry) continue;
-    const parts: string[] = [];
+    const parts: Bi[] = [];
 
     if (issue.kind === "missing-room" || issue.kind === "room-clash") {
       const current = issue.kind === "room-clash" ? entry.rooms : [];
       const others = working.map((other) => (other === entry ? { ...other, rooms: [] } : other));
       const rooms = suggestRooms({ ...entry, rooms: [] }, others).filter((rule) => !rule.rooms.some((room) => current.includes(room)));
-      const prefix = issue.kind === "room-clash" ? `ย้าย ${entry.title} ไป` : "ห้องที่ว่าง";
-      parts.push(rooms.length ? `${prefix}: ${rooms.slice(0, 3).map(roomLabel).join(" · หรือ ")}` : "ไม่มีห้องว่างในช่วงเวลานี้ — ต้องเลื่อนเวลา");
+      const prefix: Bi = issue.kind === "room-clash" ? { th: `ย้าย ${entry.title} ไป`, en: `Move ${entry.title} to` } : { th: "ห้องที่ว่าง", en: "Available rooms" };
+      const options = rooms.slice(0, 3).map(roomLabel);
+      parts.push(
+        rooms.length
+          ? { th: `${prefix.th}: ${options.join(" · หรือ ")}`, en: `${prefix.en}: ${options.join(" · or ")}` }
+          : { th: "ไม่มีห้องว่างในช่วงเวลานี้ — ต้องเลื่อนเวลา", en: "No room is available at this time — reschedule the exam" },
+      );
       if (rooms[0]) entry.rooms = [...rooms[0].rooms];
     }
 
@@ -82,7 +94,7 @@ export function withSuggestions(issues: ScheduleIssue[], entries: ExamEntry[], l
       const stay = entry.invigilators.filter((name) => !RESIGNED_INVIGILATORS.includes(name) && !clashing.has(name));
       const people = suggestInvigilators({ ...entry, invigilators: stay }, working, hours, Math.max(0, needed - stay.length));
       if (people.length) {
-        parts.push(`กรรมการที่ว่างและชั่วโมงน้อยสุด: ${people.join(", ")}`);
+        parts.push({ th: `กรรมการที่ว่างและชั่วโมงน้อยสุด: ${people.join(", ")}`, en: `Available invigilators with the fewest hours: ${people.join(", ")}` });
         entry.invigilators = [...stay, ...people];
         for (const name of people) {
           const load = hours.find((candidate) => candidate.name === name);
@@ -91,7 +103,7 @@ export function withSuggestions(issues: ScheduleIssue[], entries: ExamEntry[], l
       }
     }
 
-    if (parts.length) result[index] = { ...issue, suggestion: parts.join(" · ") };
+    if (parts.length) result[index] = { ...issue, suggestion: joinBi(parts, " · ") };
   }
   return result;
 }

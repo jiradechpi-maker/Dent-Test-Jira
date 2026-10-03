@@ -5,8 +5,10 @@ import { useUiStore } from "@/stores/ui-store";
 import { CommandPalette } from "./command-palette";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { useT } from "@/components/i18n/locale-provider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useT();
   useEffect(() => {
     void useUiStore.persist.rehydrate();
   }, []);
@@ -17,7 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         href="#main"
         className="sr-only z-[60] rounded-md bg-card px-3 py-2 text-sm shadow-[var(--shadow-md)] focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
       >
-        ข้ามไปยังเนื้อหา
+        {t("ข้ามไปยังเนื้อหา", "Skip to content")}
       </a>
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">

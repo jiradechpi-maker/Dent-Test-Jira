@@ -67,7 +67,7 @@ describe("withSuggestions", () => {
   it("does not hand the same room or person to two open exams at the same time", () => {
     const entries = [exam({ id: "y4", year: 4 }), exam({ id: "y3", year: 3, start: "10:00", end: "12:00" })];
     const issues = withSuggestions(findIncompleteExams(entries, "2026-10-01"), entries, []);
-    const [first, second] = issues.map((issue) => issue.suggestion ?? "");
+    const [first, second] = issues.map((issue) => issue.suggestion?.th ?? "");
     expect(first).toContain("401");
     expect(second).not.toMatch(/ห้องที่ว่าง: Conference/);
     const people = (text: string) => text.split("น้อยสุด: ")[1]?.split(", ") ?? [];
@@ -78,7 +78,8 @@ describe("withSuggestions", () => {
     const entries = [exam({ id: "r", rooms: ["Conference room 1 (401)"], invigilators: ["Oil", "Bank"] })];
     const issues = withSuggestions(findIncompleteExams(entries, "2026-10-01"), entries, []);
     expect(issues[0]).toMatchObject({ kind: "resigned-invigilator" });
-    expect(issues[0]?.suggestion).toMatch(/น้อยสุด: \w+$/);
+    expect(issues[0]?.suggestion?.th).toMatch(/น้อยสุด: \w+$/);
+    expect(issues[0]?.suggestion?.en).toMatch(/^Available invigilators with the fewest hours: \w+$/);
   });
 
   it("pairs any two of DT01/DT03/DT05 for years 1–2 when one is taken", () => {
@@ -92,6 +93,7 @@ describe("withSuggestions", () => {
       exam({ id: "b", title: "Biomaterials", rooms: ["Conference room 1 (401)"], invigilators: ["Pim", "Thai"], start: "10:00", end: "12:00" }),
     ];
     const clash = withSuggestions(findExamClashes(entries), entries, []).find((issue) => issue.kind === "room-clash");
-    expect(clash?.suggestion).toMatch(/^ย้าย Biomaterials ไป: Lecture 1 \+ Lecture 3/);
+    expect(clash?.suggestion?.th).toMatch(/^ย้าย Biomaterials ไป: Lecture 1 \+ Lecture 3 · หรือ /);
+    expect(clash?.suggestion?.en).toMatch(/^Move Biomaterials to: Lecture 1 \+ Lecture 3 · or /);
   });
 });

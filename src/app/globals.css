@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ──────────────────────────────────────────────────────────────
-   DentOps design system — "Enterprise Purple"
+   Dentboard design system — "Enterprise Purple"
    Inspired by Linear · Stripe · Atlassian. Dense, calm, fast.
    ────────────────────────────────────────────────────────────── */
 
@@ -194,7 +194,7 @@
   font-display: block;
 }
 
-/* Printing a letter: only the letter pages, edge to edge on A4. */
+/* Printing a letter or the exam-rules notice: only those pages, edge to edge on A4. */
 @media print {
   @page {
     size: A4 portrait;
@@ -204,13 +204,20 @@
   body {
     background: #fff !important;
   }
-  body:has(#letter-print-root) > *:not(#letter-print-root) {
+  body:has(#letter-print-root) > *:not(#letter-print-root),
+  body:has(#notice-print-root) > *:not(#notice-print-root) {
     display: none !important;
   }
-  #letter-print-root {
+  #letter-print-root,
+  #notice-print-root {
     position: static !important;
     left: auto !important;
     top: auto !important;
     visibility: visible !important;
   }
+}
+
+/* English UI: Latin-first font stack (Inter), Thai glyphs still fall back to IBM Plex Sans Thai. */
+html:lang(en) body {
+  font-family: var(--font-latin);
 }

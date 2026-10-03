@@ -14,181 +14,174 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { bi, type Bi } from "@/lib/i18n/locale";
 
 export type ModuleStatus = "ready" | "planned";
 
 export interface NavItem {
   id: string;
-  label: string;
+  label: Bi;
   href: string;
   icon: LucideIcon;
-  description: string;
+  description: Bi;
   status: ModuleStatus;
   /** Delivery phase for planned modules. */
   phase?: number;
   /** Extra search terms for the command palette (Thai + English). */
   keywords?: string[];
   /** Planned capabilities, shown on the module's empty state. */
-  features?: string[];
+  features?: Bi[];
 }
 
 export interface NavGroup {
-  label: string;
+  label: Bi;
   items: NavItem[];
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "ภาพรวม",
+    label: bi("ภาพรวม", "Overview"),
     items: [
       {
         id: "dashboard",
-        label: "แดชบอร์ด",
+        label: bi("แดชบอร์ด", "Dashboard"),
         href: "/",
         icon: LayoutDashboard,
-        description: "ภาพรวมงานวิชาการวันนี้",
+        description: bi("ภาพรวมงานวิชาการวันนี้", "Today's academic work at a glance"),
         status: "ready",
         keywords: ["dashboard", "home", "หน้าแรก"],
       },
     ],
   },
   {
-    label: "ตารางเรียน-สอบ",
+    label: bi("ตารางเรียน-สอบ", "Teaching & exams"),
     items: [
       {
         id: "schedule",
-        label: "ตารางสอนชั้นปี 4",
+        label: bi("ตารางสอนชั้นปี 4", "Year 4 timetable"),
         href: "/schedule",
         icon: CalendarDays,
-        description: "ซิงก์จาก Google Drive อัตโนมัติ · ดูรายสัปดาห์ ค้นหาอาจารย์ และแจ้งเมื่อตารางเปลี่ยน",
+        description: bi("ซิงก์จาก Google Drive อัตโนมัติ · ดูรายสัปดาห์ ค้นหาอาจารย์ และแจ้งเมื่อตารางเปลี่ยน", "Synced from Google Drive · weekly view, lecturer search and change alerts"),
         status: "ready",
         keywords: ["schedule", "timetable", "ตารางเรียน", "ตารางสอน", "ปี 4", "google sheets"],
       },
       {
         id: "courses",
-        label: "รายวิชาในหลักสูตร",
+        label: bi("รายวิชาในหลักสูตร", "Curriculum"),
         href: "/courses",
         icon: BookOpen,
-        description: "รายวิชาแยกตามชั้นปีและภาคเรียน พร้อมสีประจำชั้นปีและสีประจำวัน",
+        description: bi("รายวิชาแยกตามชั้นปีและภาคเรียน พร้อมสีประจำชั้นปีและสีประจำวัน", "Courses by year and semester, with cohort and weekday colours"),
         status: "ready",
         keywords: ["course", "curriculum", "subject", "รายวิชา", "หลักสูตร", "รหัสวิชา", "สีชั้นปี"],
       },
       {
         id: "exams",
-        label: "ตารางสอบ",
+        label: bi("ตารางสอบ", "Exam schedule"),
         href: "/exams",
         icon: ClipboardList,
-        description: "ตารางคุมสอบรายเดือน · ตรวจห้องชน กรรมการซ้อนเวลา และวันสอบที่ไม่ตรงกับตารางสอน",
+        description: bi("ตารางคุมสอบรายเดือน · ตรวจห้องชน กรรมการซ้อนเวลา และวันสอบที่ไม่ตรงกับตารางสอน", "Monthly invigilation schedule · room clashes, double-booked invigilators and exams that disagree with the timetable"),
         status: "ready",
         keywords: ["exam", "สอบ", "คุมสอบ", "ห้องชน"],
       },
       {
         id: "invigilators",
-        label: "ชั่วโมงคุมสอบ",
+        label: bi("ชั่วโมงคุมสอบ", "Invigilation hours"),
         href: "/invigilators",
         icon: Users,
-        description: "ชั่วโมงคุมสอบสะสมรายบุคคล เรียงจากน้อยไปมากเพื่อจัดงานให้เท่ากัน",
+        description: bi("ชั่วโมงคุมสอบสะสมรายบุคคล เรียงจากน้อยไปมากเพื่อจัดงานให้เท่ากัน", "Hours per invigilator, fewest first, to share work fairly"),
         status: "ready",
         keywords: ["invigilator", "proctor", "คุมสอบ", "ชั่วโมง"],
       },
       {
         id: "exam-papers",
-        label: "คลังข้อสอบ",
+        label: bi("คลังข้อสอบ", "Exam papers"),
         href: "/exam-papers",
         icon: Archive,
-        description: "ติดตามข้อสอบ 9 สถานะ นับถอยหลัง T-7 และบันทึกเข้า-ออกตู้เซฟ",
+        description: bi("ติดตามข้อสอบ 9 สถานะ นับถอยหลัง T-7 และบันทึกเข้า-ออกตู้เซฟ", "Track papers through 9 stages, T-7 countdown and safe check-in/out"),
         status: "planned",
         phase: 4,
         keywords: ["exam paper", "kanban", "ข้อสอบ", "เซฟ"],
-        features: [
-          "Kanban 9 สถานะ ตั้งแต่ทวงข้อสอบจนคืนเซฟ",
-          "แจ้งเตือน T-7 ทาง LINE ทุกวัน 08:00 น.",
-          "สร้างใบปะหน้าข้อสอบและป้ายซองอัตโนมัติ",
-        ],
+        features: [bi("Kanban 9 สถานะ ตั้งแต่ทวงข้อสอบจนคืนเซฟ", "9-stage Kanban from requesting papers to returning them to the safe"), bi("แจ้งเตือน T-7 ทาง LINE ทุกวัน 08:00 น.", "Daily T-7 reminders on LINE at 08:00"), bi("สร้างใบปะหน้าข้อสอบและป้ายซองอัตโนมัติ", "Automatic cover sheets and envelope labels")],
       },
     ],
   },
   {
-    label: "เอกสาร",
+    label: bi("เอกสาร", "Documents"),
     items: [
       {
         id: "invitations",
-        label: "หนังสือเชิญอาจารย์พิเศษ",
+        label: bi("หนังสือเชิญอาจารย์พิเศษ", "Guest lecturer invitations"),
         href: "/documents/invitations",
         icon: Mail,
-        description: "ออกหนังสือเชิญ (.docx / .pdf) ตามแบบฟอร์มคณะ พร้อมพรีวิว PDF",
+        description: bi("ออกหนังสือเชิญ (.docx / .pdf) ตามแบบฟอร์มคณะ พร้อมพรีวิว PDF", "Issue invitation letters (.docx / .pdf) on the faculty template, with PDF preview"),
         status: "ready",
         keywords: ["invitation", "letter", "หนังสือเชิญ", "อาจารย์พิเศษ", "docx", "pdf"],
       },
       {
         id: "documents",
-        label: "คลังเอกสาร",
+        label: bi("คลังเอกสาร", "Document archive"),
         href: "/documents",
         icon: FileText,
-        description: "ประวัติเอกสาร ฉบับแก้ไข และใบลงเวลาสอน",
+        description: bi("ประวัติเอกสาร ฉบับแก้ไข และใบลงเวลาสอน", "Document history, revisions and teaching time sheets"),
         status: "planned",
         phase: 5,
         keywords: ["documents", "revision", "timesheet"],
-        features: [
-          "เก็บทุกฉบับพร้อมเลขหนังสือรันอัตโนมัติ",
-          "ตรวจจับตารางเปลี่ยน → ออกฉบับแก้ไขได้ในคลิกเดียว",
-          "ใบลงเวลาสอนสำหรับเบิกจ่าย",
-        ],
+        features: [bi("เก็บทุกฉบับพร้อมเลขหนังสือรันอัตโนมัติ", "Every version kept, with automatic document numbers"), bi("ตรวจจับตารางเปลี่ยน → ออกฉบับแก้ไขได้ในคลิกเดียว", "Timetable change detected → issue a revised letter in one click"), bi("ใบลงเวลาสอนสำหรับเบิกจ่าย", "Teaching time sheets for payment claims")],
       },
       {
         id: "templates",
-        label: "แม่แบบเอกสาร",
+        label: bi("แม่แบบเอกสาร", "Templates"),
         href: "/templates",
         icon: FileStack,
-        description: "จัดการแม่แบบ .docx พร้อมเวอร์ชัน",
+        description: bi("จัดการแม่แบบ .docx พร้อมเวอร์ชัน", "Manage versioned .docx templates"),
         status: "ready",
         keywords: ["template", "แม่แบบ", "docx"],
       },
     ],
   },
   {
-    label: "เครื่องมือ",
+    label: bi("เครื่องมือ", "Tools"),
     items: [
       {
         id: "exam-timer",
-        label: "นาฬิกาจับเวลาสอบ",
+        label: bi("นาฬิกาจับเวลาสอบ", "Exam timer"),
         href: "/exam-timer",
         icon: Timer,
-        description: "ตั้งเวลาเลิกสอบแล้วนับถอยหลังทันที แสดงเต็มจอบนโปรเจกเตอร์",
+        description: bi("นับถอยหลังเต็มจอบนโปรเจกเตอร์ พร้อมข้อปฏิบัติก่อนสอบและเตือนเมื่อเหลือ 5 นาที", "Full-screen projector countdown with the exam rules and a 5-minute warning"),
         status: "ready",
-        keywords: ["timer", "countdown", "clock", "จับเวลา", "นาฬิกา", "สอบ"],
+        keywords: ["timer", "countdown", "clock", "exam rules", "notice", "จับเวลา", "นาฬิกา", "สอบ", "ข้อปฏิบัติ", "ประกาศ", "กติกา"],
       },
       {
         id: "slot-finder",
-        label: "หาวันว่าง",
+        label: bi("หาวันว่าง", "Slot finder"),
         href: "/slot-finder",
         icon: CalendarSearch,
-        description: "ค้นหาช่วงว่างข้ามชั้นปี ห้องว่าง และเลื่อนคาบแบบ Cascade",
+        description: bi("ค้นหาช่วงว่างข้ามชั้นปี ห้องว่าง และเลื่อนคาบแบบ Cascade", "Find free slots across all years, free rooms and cascade rescheduling"),
         status: "planned",
         phase: 6,
         keywords: ["slot", "free", "ว่าง", "เลื่อน"],
-        features: ["ตรวจชนทั้ง 6 ชั้นปี + ห้องว่าง + ปฏิทินอาจารย์", "Cascade shift พร้อมตารางเปรียบเทียบก่อน-หลัง"],
+        features: [bi("ตรวจชนทั้ง 6 ชั้นปี + ห้องว่าง + ปฏิทินอาจารย์", "Clash check across 6 years + free rooms + lecturer calendars"), bi("Cascade shift พร้อมตารางเปรียบเทียบก่อน-หลัง", "Cascade shift with a before/after comparison")],
       },
     ],
   },
   {
-    label: "ระบบ",
+    label: bi("ระบบ", "System"),
     items: [
       {
         id: "master-data",
-        label: "ข้อมูลหลัก",
+        label: bi("ข้อมูลหลัก", "Master data"),
         href: "/master-data",
         icon: Database,
-        description: "บุคลากรคุมสอบ ห้องสอบ และรายวิชา",
+        description: bi("บุคลากรคุมสอบ ห้องสอบ และรายวิชา", "Invigilators, exam rooms and courses"),
         status: "ready",
         keywords: ["master", "staff", "rooms", "courses", "ห้อง", "รายวิชา"],
       },
       {
         id: "settings",
-        label: "ตั้งค่า",
+        label: bi("ตั้งค่า", "Settings"),
         href: "/settings",
         icon: Settings,
-        description: "สถานะระบบ บริการแปลง PDF และสิทธิ์ผู้ใช้",
+        description: bi("สถานะระบบ บริการแปลง PDF และสิทธิ์ผู้ใช้", "System status, PDF service and user roles"),
         status: "ready",
         keywords: ["settings", "config", "ตั้งค่า"],
       },

@@ -2,7 +2,12 @@
  * Official course catalogue — Faculty of Dentistry, KMITL
  * Doctor of Dental Surgery (International Program), academic year 2569.
  * Imported from the previous Dent Letter System (legacy/dent-letter-vite).
+ *
+ * The per-course rows are data (names, credits, instructor nicknames, Thai year/semester labels) and stay as
+ * imported; screens render year and semester from `year` / `semester` in the viewer's language.
  */
+
+import type { Bi } from "@/lib/i18n/locale";
 
 export interface CourseCatalogItem {
   code: string;
@@ -1447,17 +1452,17 @@ export const COURSES_DATA: CourseCatalogItem[] = [
 
 export type CatalogSemester = CourseCatalogItem["semester"];
 
-export const SEMESTER_TABS: { value: CatalogSemester; label: string; short: string }[] = [
-  { value: "1", label: "ภาคเรียนที่ 1", short: "ภาค 1" },
-  { value: "2", label: "ภาคเรียนที่ 2", short: "ภาค 2" },
-  { value: "year", label: "ตลอดปี / คลินิก", short: "ตลอดปี" },
+export const SEMESTER_TABS: { value: CatalogSemester; label: Bi; short: Bi }[] = [
+  { value: "1", label: { th: "ภาคเรียนที่ 1", en: "Semester 1" }, short: { th: "ภาค 1", en: "Sem 1" } },
+  { value: "2", label: { th: "ภาคเรียนที่ 2", en: "Semester 2" }, short: { th: "ภาค 2", en: "Sem 2" } },
+  { value: "year", label: { th: "ตลอดปี / คลินิก", en: "Full year / clinical" }, short: { th: "ตลอดปี", en: "Full year" } },
 ];
 
-export const CATEGORY_LABEL: Record<NonNullable<CourseCatalogItem["category"]>, string> = {
-  core: "วิชาบังคับ",
-  clinic: "คลินิก",
-  elective: "วิชาเลือก",
-  ge: "ศึกษาทั่วไป",
+export const CATEGORY_LABEL: Record<NonNullable<CourseCatalogItem["category"]>, Bi> = {
+  core: { th: "วิชาบังคับ", en: "Core" },
+  clinic: { th: "คลินิก", en: "Clinical" },
+  elective: { th: "วิชาเลือก", en: "Elective" },
+  ge: { th: "ศึกษาทั่วไป", en: "General education" },
 };
 
 export const CATALOG_YEARS = [1, 2, 3, 4, 5, 6] as const;

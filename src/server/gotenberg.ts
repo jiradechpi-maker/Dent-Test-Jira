@@ -2,13 +2,15 @@
  * Minimal Gotenberg client: .docx → .pdf through LibreOffice headless.
  * https://gotenberg.dev/docs/routes#convert-with-libreoffice
  */
+import { bi, type Bi } from "@/lib/i18n/locale";
 
+/** `text` is the user-facing message (render with t()); `status` is the HTTP status to answer with. */
 export class PdfConversionError extends Error {
   constructor(
-    message: string,
+    readonly text: Bi,
     readonly status: number,
   ) {
-    super(message);
+    super(text.th);
     this.name = "PdfConversionError";
   }
 }
@@ -30,7 +32,10 @@ const CONVERT_TIMEOUT_MS = 30_000;
 export async function convertDocxToPdf(docx: Buffer, fileName = "document.docx"): Promise<Buffer> {
   const base = gotenbergUrl();
   if (!base) {
-    throw new PdfConversionError("ยังไม่ได้ตั้งค่า GOTENBERG_URL — ดาวน์โหลดเป็น .docx ได้ตามปกติ", 503);
+    throw new PdfConversionError(
+      bi("ยังไม่ได้ตั้งค่า GOTENBERG_URL — ดาวน์โหลดเป็น .docx ได้ตามปกติ", "GOTENBERG_URL is not configured — you can still download the .docx"),
+      503,
+    );
   }
 
   const form = new FormData();
@@ -54,13 +59,19 @@ export async function convertDocxToPdf(docx: Buffer, fileName = "document.docx")
       cache: "no-store",
     });
   } catch (error) {
-    const reason = error instanceof Error && error.name === "TimeoutError" ? "หมดเวลาเชื่อมต่อ" : "เชื่อมต่อไม่ได้";
-    throw new PdfConversionError(`บริการแปลง PDF (Gotenberg) ${reason}`, 502);
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    throw new PdfConversionError(
+      timedOut
+        ? bi("บริการแปลง PDF (Gotenberg) หมดเวลาเชื่อมต่อ", "The PDF conversion service (Gotenberg) timed out")
+        : bi("บริการแปลง PDF (Gotenberg) เชื่อมต่อไม่ได้", "Couldn't reach the PDF conversion service (Gotenberg)"),
+      502,
+    );
   }
 
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 300);
-    throw new PdfConversionError(`Gotenberg ตอบกลับ ${response.status}${detail ? `: ${detail}` : ""}`, 502);
+    const suffix = `${response.status}${detail ? `: ${detail}` : ""}`;
+    throw new PdfConversionError(bi(`Gotenberg ตอบกลับ ${suffix}`, `Gotenberg responded ${suffix}`), 502);
   }
 
   return Buffer.from(await response.arrayBuffer());

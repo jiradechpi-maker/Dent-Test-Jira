@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
+import { useT } from "@/components/i18n/locale-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,7 @@ export function useHealth() {
 }
 
 export function ServiceStatusList() {
+  const t = useT();
   const health = useHealth();
 
   if (health.isPending) {
@@ -38,9 +40,9 @@ export function ServiceStatusList() {
   if (health.isError) {
     return (
       <div className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] bg-danger-bg px-3 py-2 text-xs text-danger">
-        <span>ตรวจสอบสถานะระบบไม่สำเร็จ</span>
+        <span>{t("ตรวจสอบสถานะระบบไม่สำเร็จ", "Could not check the system status")}</span>
         <Button variant="secondary" size="sm" onClick={() => void health.refetch()}>
-          <RefreshCw aria-hidden /> ลองใหม่
+          <RefreshCw aria-hidden /> {t("ลองใหม่", "Try again")}
         </Button>
       </div>
     );
@@ -48,20 +50,25 @@ export function ServiceStatusList() {
 
   const pdf = health.data.services.pdf;
   const rows = [
-    { name: "เว็บแอปพลิเคชัน", ok: health.data.ok, text: "ทำงานปกติ" },
-    { name: "สร้างไฟล์ Word (.docx)", ok: true, text: "พร้อมใช้งาน" },
+    { id: "web", name: t("เว็บแอปพลิเคชัน", "Web application"), ok: health.data.ok, text: t("ทำงานปกติ", "Operational") },
+    { id: "docx", name: t("สร้างไฟล์ Word (.docx)", "Word file generation (.docx)"), ok: true, text: t("พร้อมใช้งาน", "Ready") },
     {
-      name: "สร้าง PDF / สั่งพิมพ์",
+      id: "pdf",
+      name: t("สร้าง PDF / สั่งพิมพ์", "PDF generation / printing"),
       // Without a PDF server, letters are rendered, printed and saved as PDF in the browser.
       ok: true,
-      text: pdf.healthy ? "พร้อมใช้งาน (เซิร์ฟเวอร์)" : pdf.configured ? "พร้อมใช้งาน (ในเบราว์เซอร์ — เซิร์ฟเวอร์ PDF ติดต่อไม่ได้)" : "พร้อมใช้งาน (ในเบราว์เซอร์)",
+      text: pdf.healthy
+        ? t("พร้อมใช้งาน (เซิร์ฟเวอร์)", "Ready (server)")
+        : pdf.configured
+          ? t("พร้อมใช้งาน (ในเบราว์เซอร์ — เซิร์ฟเวอร์ PDF ติดต่อไม่ได้)", "Ready (in browser — PDF server unreachable)")
+          : t("พร้อมใช้งาน (ในเบราว์เซอร์)", "Ready (in browser)"),
     },
   ];
 
   return (
     <ul className="flex flex-col divide-y divide-border">
       {rows.map((row) => (
-        <li key={row.name} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+        <li key={row.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
           <span className="flex items-center gap-2">
             {row.ok ? (
               <CheckCircle2 className="size-4 text-success" aria-hidden />

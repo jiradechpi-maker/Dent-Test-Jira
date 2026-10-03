@@ -5,6 +5,7 @@
  */
 
 import { parseTime } from "@/lib/thai";
+import type { Locale } from "@/lib/i18n/locale";
 
 export type TimerPhase = "waiting" | "running" | "ended";
 
@@ -48,61 +49,9 @@ export function createSession(
   return { ok: true, session: { startAt, endAt, createdAt: now, plannedEndAt: endAt } };
 }
 
-/** Starts on the current whole minute so the screen reads e.g. 10:07–11:07 and "1 ชั่วโมง", not 10:07–11:08. */
-export function createSessionFromDuration(now: number, minutes: number): ExamSession {
-  const startAt = Math.floor(now / 60_000) * 60_000;
-  const endAt = startAt + Math.round(minutes * 60_000);
-  return { startAt, endAt, createdAt: now, plannedEndAt: endAt };
-}
-
 /** Minutes added with the extend buttons (0 when none). */
 export function extensionMs(session: ExamSession): number {
   return Math.max(0, session.endAt - (session.plannedEndAt ?? session.endAt));
-}
-
-export interface RoomRules {
-  /** Candidates may enter until this many minutes after the start (0 = no rule). */
-  lateEntryMinutes: number;
-  /** Candidates may leave only after this many minutes (0 = no rule). */
-  earlyLeaveMinutes: number;
-  /** Candidates may not leave in the last N minutes, to keep the end of the exam quiet (0 = no rule). */
-  lastLeaveMinutes: number;
-}
-
-export interface RoomNotice {
-  key: "entry" | "leave" | "last";
-  text: string;
-  /** "open" = allowed now, "closed" = not allowed now, "info" = before the exam starts. */
-  state: "open" | "closed" | "info";
-}
-
-/** The door rules invigilators announce, worded for the current moment. */
-export function roomNotices(session: ExamSession, now: number, rules: RoomRules): RoomNotice[] {
-  const phase = phaseAt(session, now);
-  if (phase === "ended") return [];
-  const notices: RoomNotice[] = [];
-  const total = session.endAt - session.startAt;
-  if (rules.lateEntryMinutes > 0 && rules.lateEntryMinutes * 60_000 < total) {
-    const until = session.startAt + rules.lateEntryMinutes * 60_000;
-    if (phase === "waiting") notices.push({ key: "entry", state: "info", text: `เข้าห้องสอบได้ถึง ${formatClock(until)} น.` });
-    else if (now < until) notices.push({ key: "entry", state: "open", text: `เข้าห้องสอบได้ถึง ${formatClock(until)} น.` });
-    else notices.push({ key: "entry", state: "closed", text: `ปิดรับเข้าห้องสอบแล้ว (${formatClock(until)} น.)` });
-  }
-  const leaveFrom = rules.earlyLeaveMinutes > 0 ? session.startAt + rules.earlyLeaveMinutes * 60_000 : session.startAt;
-  const leaveUntil = rules.lastLeaveMinutes > 0 ? session.endAt - rules.lastLeaveMinutes * 60_000 : session.endAt;
-  if (rules.earlyLeaveMinutes > 0 && leaveFrom < session.endAt) {
-    if (phase === "waiting") notices.push({ key: "leave", state: "info", text: `ออกจากห้องสอบได้ตั้งแต่ ${formatClock(leaveFrom)} น.` });
-    else if (now < leaveFrom) notices.push({ key: "leave", state: "closed", text: `ยังออกจากห้องสอบไม่ได้ จนถึง ${formatClock(leaveFrom)} น.` });
-    else if (now < leaveUntil) notices.push({ key: "leave", state: "open", text: "ออกจากห้องสอบได้แล้ว" });
-  }
-  if (rules.lastLeaveMinutes > 0 && leaveUntil > session.startAt) {
-    if (now >= leaveUntil && phase === "running") {
-      notices.push({ key: "last", state: "closed", text: `${rules.lastLeaveMinutes} นาทีสุดท้าย — กรุณานั่งรอจนหมดเวลา` });
-    } else if (phase === "waiting") {
-      notices.push({ key: "last", state: "info", text: `งดออกจากห้อง ${rules.lastLeaveMinutes} นาทีสุดท้าย` });
-    }
-  }
-  return notices;
 }
 
 export function phaseAt(session: ExamSession, now: number): TimerPhase {
@@ -155,6 +104,17 @@ export function formatClock(ms: number, withSeconds = false): string {
   return `${hh}:${mm}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
+/** 180 min → "3 ชั่วโมง" · "3 hours"; 90 → "1 ชั่วโมงครึ่ง" · "1 h 30 min". */
+export function formatDuration(ms: number, locale: Locale): string {
+  if (locale === "th") return formatDurationThai(ms);
+  const totalMinutes = Math.round(ms / 60_000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h && m) return `${h} h ${m} min`;
+  if (h) return h === 1 ? "1 hour" : `${h} hours`;
+  return m === 1 ? "1 minute" : `${m} minutes`;
+}
+
 export function formatDurationThai(ms: number): string {
   const totalMinutes = Math.round(ms / 60_000);
   if (totalMinutes % 60 === 30 && totalMinutes > 60) return `${Math.floor(totalMinutes / 60)} ชั่วโมงครึ่ง`;
@@ -188,9 +148,11 @@ export function crossedThresholds(session: ExamSession, prevNow: number, now: nu
   if (now <= prevNow) return [];
   const prevLeft = session.endAt - prevNow;
   const left = session.endAt - now;
+  const total = session.endAt - session.startAt;
+  // A checkpoint as long as the whole exam (60 min left in a 60-minute exam) would collide with "you may begin".
   return thresholdsMinutes.filter((m) => {
     const t = m * 60_000;
-    return prevLeft > t && left <= t && left > 0;
+    return t < total && prevLeft > t && left <= t && left > 0;
   });
 }
 

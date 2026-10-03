@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "DentOps · คณะทันตแพทยศาสตร์ สจล.",
-    short_name: "DentOps",
+    name: "Dentboard · คณะทันตแพทยศาสตร์ สจล.",
+    short_name: "Dentboard",
     start_url: "/",
     display: "standalone",
     background_color: "#FFFFFF",

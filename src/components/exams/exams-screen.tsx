@@ -10,8 +10,11 @@ import { YearBadge } from "@/components/courses/course-picker";
 import { withSuggestions } from "@/lib/schedule/suggest";
 import { mediumDay, shortDay, timeSpan } from "@/lib/schedule/format";
 import type { ExamEntry } from "@/lib/schedule/invigilation";
-import { THAI_MONTHS, todayInBangkok } from "@/lib/thai";
+import { displayYear, formatMonthYear, monthName } from "@/lib/i18n/dates";
+import type { Locale } from "@/lib/i18n/locale";
+import { todayInBangkok } from "@/lib/thai";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/locale-provider";
 import { PageContainer, PageHeader } from "@/components/common/page-header";
 import { ChangesCard } from "@/components/schedule/changes-card";
 import { IssueList } from "@/components/schedule/issue-list";
@@ -24,13 +27,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const UNDATED = "undated";
 
-function monthLabel(month: string): string {
+/** "2026-10" → "ตุลาคม 69" (like the sheet's own tab names) · "Oct 2026". */
+function monthLabel(month: string, locale: Locale): string {
+  if (locale === "en") return formatMonthYear(month, "en", "short");
   const [y, m] = month.split("-").map(Number);
-  return `${THAI_MONTHS[m! - 1]} ${String(y! + 543).slice(-2)}`;
+  return `${monthName(m!, "th")} ${String(displayYear(y!, "th")).slice(-2)}`;
 }
 
 export function ExamsScreen() {
   const { query, teaching, invigilation, refresh, refreshing, upload, clearUpload, hasUpload, serviceAccountEmail } = useScheduleBundle();
+  const t = useT();
   const [today] = useState(() => todayInBangkok());
   const book = invigilation?.ok ? invigilation.data : null;
 
@@ -71,8 +77,11 @@ export function ExamsScreen() {
     <PageContainer>
       <PageHeader
         icon={ClipboardList}
-        title="ตารางสอบและกรรมการคุมสอบ"
-        description="จาก “ตารางบันทึกเวลาคุมสอบ” บน Google Drive · ตรวจห้องชน กรรมการซ้อนเวลา และเทียบวันสอบกับตารางสอนให้อัตโนมัติ"
+        title={t("ตารางสอบและกรรมการคุมสอบ", "Exams and invigilation")}
+        description={t(
+          "จาก “ตารางบันทึกเวลาคุมสอบ” บน Google Drive · ตรวจห้องชน กรรมการซ้อนเวลา และเทียบวันสอบกับตารางสอนให้อัตโนมัติ",
+          "From the invigilation log (“ตารางบันทึกเวลาคุมสอบ”) on Google Drive · automatically checks for room clashes, double-booked invigilators and exam dates that disagree with the timetable",
+        )}
         actions={<RefreshButton onRefresh={refresh} refreshing={refreshing} />}
         className="mb-3"
       />
@@ -102,25 +111,31 @@ export function ExamsScreen() {
           <Card>
             <CardHeader className="flex-col sm:flex-row">
               <div>
-                <CardTitle>สิ่งที่ต้องตรวจ ({issues.length})</CardTitle>
+                <CardTitle>{t(`สิ่งที่ต้องตรวจ (${issues.length})`, `Items to review (${issues.length})`)}</CardTitle>
                 <CardDescription>
-                  เฉพาะสอบที่ยังไม่ถึงวัน · เทียบวันสอบปี {MY_YEAR} กับตารางสอน{teaching?.ok ? "" : " (ยังเปิดตารางสอนไม่ได้ — ข้ามการเทียบ)"}
+                  {t(
+                    `เฉพาะสอบที่ยังไม่ถึงวัน · เทียบวันสอบปี ${MY_YEAR} กับตารางสอน${teaching?.ok ? "" : " (ยังเปิดตารางสอนไม่ได้ — ข้ามการเทียบ)"}`,
+                    `Upcoming exams only · Year ${MY_YEAR} exam dates compared with the timetable${teaching?.ok ? "" : " (timetable unavailable — comparison skipped)"}`,
+                  )}
                 </CardDescription>
               </div>
               <Segmented<IssueSeverity | "all">
-                ariaLabel="ระดับ"
+                ariaLabel={t("ระดับ", "Severity")}
                 value={severity}
                 onChange={setSeverity}
                 options={[
-                  { value: "all", label: "ทั้งหมด" },
-                  { value: "danger", label: `ด่วน (${issues.filter((i) => i.severity === "danger").length})` },
-                  { value: "warning", label: `ตรวจ (${issues.filter((i) => i.severity === "warning").length})` },
-                  { value: "info", label: "แจ้งให้ทราบ" },
+                  { value: "all", label: t("ทั้งหมด", "All") },
+                  { value: "danger", label: `${t("ด่วน", "Urgent")} (${issues.filter((i) => i.severity === "danger").length})` },
+                  { value: "warning", label: `${t("ตรวจ", "Review")} (${issues.filter((i) => i.severity === "warning").length})` },
+                  { value: "info", label: t("แจ้งให้ทราบ", "Info") },
                 ]}
               />
             </CardHeader>
             <CardContent>
-              <IssueList issues={shownIssues} empty="ไม่พบห้องชน กรรมการซ้อนเวลา หรือวันสอบที่ไม่ตรงกัน" />
+              <IssueList
+                issues={shownIssues}
+                empty={t("ไม่พบห้องชน กรรมการซ้อนเวลา หรือวันสอบที่ไม่ตรงกัน", "No room clashes, double-booked invigilators or mismatched exam dates")}
+              />
             </CardContent>
           </Card>
 
@@ -128,20 +143,23 @@ export function ExamsScreen() {
             <div className="flex flex-col gap-2 border-b border-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
               <div className="overflow-x-auto scrollbar-thin">
                 <Segmented<string>
-                  ariaLabel="เดือน"
+                  ariaLabel={t("เดือน", "Month")}
                   value={month}
                   onChange={setMonth}
                   options={[
-                    ...months.map((value) => ({ value, label: monthLabel(value) })),
-                    ...(undatedCount ? [{ value: UNDATED, label: `ยังไม่มีวัน (${undatedCount})` }] : []),
+                    ...months.map((value) => ({ value, label: monthLabel(value, t.locale) })),
+                    ...(undatedCount ? [{ value: UNDATED, label: `${t("ยังไม่มีวัน", "No date yet")} (${undatedCount})` }] : []),
                   ]}
                 />
               </div>
               <Segmented<string>
-                ariaLabel="ชั้นปี"
+                ariaLabel={t("ชั้นปี", "Student year")}
                 value={String(year)}
                 onChange={(value) => setYear(value === "all" ? "all" : Number(value))}
-                options={[{ value: "all", label: "ทุกชั้นปี" }, ...[1, 2, 3, 4, 5, 6].map((y) => ({ value: String(y), label: `ปี ${y}` }))]}
+                options={[
+                  { value: "all", label: t("ทุกชั้นปี", "All years") },
+                  ...[1, 2, 3, 4, 5, 6].map((y) => ({ value: String(y), label: t(`ปี ${y}`, `Year ${y}`) })),
+                ]}
               />
             </div>
             <ExamTable rows={rows} today={today} issueIds={issueIds} />
@@ -153,19 +171,21 @@ export function ExamsScreen() {
 }
 
 function ExamTable({ rows, today, issueIds }: { rows: ExamEntry[]; today: string; issueIds: Map<string, IssueSeverity> }) {
-  if (rows.length === 0) return <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">ไม่มีรายการสอบ</p>;
+  const t = useT();
+  const locale = t.locale;
+  if (rows.length === 0) return <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">{t("ไม่มีรายการสอบ", "No exams")}</p>;
   return (
     <div className="overflow-x-auto scrollbar-thin">
       <table className="w-full min-w-[900px] text-left text-[13px]">
         <thead className="bg-neutral-50 text-xs text-neutral-500">
           <tr className="h-[var(--spacing-row)]">
-            <th scope="col" className="px-3 font-medium">วันที่</th>
-            <th scope="col" className="px-3 font-medium">เวลา</th>
-            <th scope="col" className="px-3 font-medium">รายวิชา</th>
-            <th scope="col" className="px-3 font-medium">ปี</th>
-            <th scope="col" className="px-3 font-medium">ห้องสอบ</th>
-            <th scope="col" className="px-3 font-medium">กรรมการคุมสอบ</th>
-            <th scope="col" className="px-3 font-medium">ข้อสอบ</th>
+            <th scope="col" className="px-3 font-medium">{t("วันที่", "Date")}</th>
+            <th scope="col" className="px-3 font-medium">{t("เวลา", "Time")}</th>
+            <th scope="col" className="px-3 font-medium">{t("รายวิชา", "Course")}</th>
+            <th scope="col" className="px-3 font-medium">{t("ปี", "Year")}</th>
+            <th scope="col" className="px-3 font-medium">{t("ห้องสอบ", "Exam room")}</th>
+            <th scope="col" className="px-3 font-medium">{t("กรรมการคุมสอบ", "Invigilators")}</th>
+            <th scope="col" className="px-3 font-medium">{t("ข้อสอบ", "Exam paper")}</th>
           </tr>
         </thead>
         <tbody>
@@ -182,9 +202,17 @@ function ExamTable({ rows, today, issueIds }: { rows: ExamEntry[]; today: string
                 )}
               >
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {entry.date ? (entry.date === today ? <b className="text-brand-700">วันนี้</b> : mediumDay(entry.date)) : <Badge tone="warning">ยังไม่มีวัน</Badge>}
+                  {entry.date ? (
+                    entry.date === today ? (
+                      <b className="text-brand-700">{t("วันนี้", "Today")}</b>
+                    ) : (
+                      mediumDay(entry.date, locale)
+                    )
+                  ) : (
+                    <Badge tone="warning">{t("ยังไม่มีวัน", "No date yet")}</Badge>
+                  )}
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap tabular">{timeSpan(entry.start, entry.end)}</td>
+                <td className="px-3 py-2 whitespace-nowrap tabular">{timeSpan(entry.start, entry.end, locale)}</td>
                 <td className="px-3 py-2">
                   <span className={cn("font-medium", past ? "text-neutral-500" : "text-neutral-900")}>{entry.title}</span>
                   <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -194,11 +222,11 @@ function ExamTable({ rows, today, issueIds }: { rows: ExamEntry[]; today: string
                         <MoveRight aria-hidden /> {entry.remark}
                       </Badge>
                     ) : null}
-                    {flagged ? <Badge tone={flagged === "danger" ? "danger" : flagged === "warning" ? "warning" : "info"}>ต้องตรวจ</Badge> : null}
+                    {flagged ? <Badge tone={flagged === "danger" ? "danger" : flagged === "warning" ? "warning" : "info"}>{t("ต้องตรวจ", "Needs review")}</Badge> : null}
                   </span>
                 </td>
                 <td className="px-3 py-2">{entry.year ? <YearBadge year={entry.year} /> : "—"}</td>
-                <td className="px-3 py-2">{entry.rooms.length ? entry.rooms.join(" · ") : <span className="text-warning">ยังไม่มีห้อง</span>}</td>
+                <td className="px-3 py-2">{entry.rooms.length ? entry.rooms.join(" · ") : <span className="text-warning">{t("ยังไม่มีห้อง", "No room yet")}</span>}</td>
                 <td className="px-3 py-2">
                   {entry.invigilators.length ? (
                     <span className="flex flex-wrap gap-1">
@@ -207,17 +235,17 @@ function ExamTable({ rows, today, issueIds }: { rows: ExamEntry[]; today: string
                       ))}
                     </span>
                   ) : (
-                    <span className="text-warning">ยังไม่มีกรรมการ</span>
+                    <span className="text-warning">{t("ยังไม่มีกรรมการ", "No invigilators yet")}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-xs whitespace-nowrap">
                   {entry.paperReceived ? (
                     <Badge tone="success">
-                      <FileCheck2 aria-hidden /> ได้รับแล้ว
+                      <FileCheck2 aria-hidden /> {t("ได้รับแล้ว", "Received")}
                     </Badge>
                   ) : entry.submitBy ? (
                     <span className={cn(!past && entry.submitBy <= today ? "font-medium text-danger" : "text-muted-foreground")}>
-                      ส่งภายใน {shortDay(entry.submitBy)}
+                      {t("ส่งภายใน", "Due")} {shortDay(entry.submitBy, locale)}
                     </span>
                   ) : (
                     "—"
